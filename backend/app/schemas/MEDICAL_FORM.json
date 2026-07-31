@@ -1,0 +1,7 @@
+{
+  "form_name": "MEDICAL_FORM",
+  "fields": {
+    "first_name": { "required": true },
+    "last_name": { "required": true }
+  }
+}

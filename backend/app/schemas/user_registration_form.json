@@ -1,0 +1,8 @@
+{
+  "form_name": "user_registration",
+  "fields": {
+    "first_name": { "required": true },
+    "last_name": { "required": true },
+    "email": { "required": true }
+  }
+}
