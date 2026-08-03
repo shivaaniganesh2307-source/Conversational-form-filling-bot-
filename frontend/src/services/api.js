@@ -1,5 +1,6 @@
 // Replace the domain below with your exact copied Port 5000 Forwarded Address from VS Code
-const API_BASE_URL = "http://127.0.0.1:5000/api";
+const API_BASE_URL = "https://opulent-space-trout-69jwgr5rr67rcx45x-5000.app.github.dev/api";
+
 
 export async function sendChatMessage(sessionId, formName, message) {
   try {
