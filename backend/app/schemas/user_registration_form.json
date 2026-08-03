@@ -1,8 +1,43 @@
 {
   "form_name": "user_registration",
   "fields": {
-    "first_name": { "required": true },
-    "last_name": { "required": true },
-    "email": { "required": true }
+    "first_name": {
+      "type": "string",
+      "required": true
+    },
+
+    "last_name": {
+      "type": "string",
+      "required": true
+    },
+
+    "email": {
+      "type": "email",
+      "required": true
+    },
+
+    "phone_number": {
+      "type": "string",
+      "required": false
+    },
+
+    "country": {
+      "type": "string",
+      "required": true
+    },
+
+    "is_student": {
+      "type": "boolean",
+      "required": true
+    },
+
+    "university_name": {
+      "type": "string",
+      "required": true,
+      "condition": {
+        "field": "is_student",
+        "equals": true
+      }
+    }
   }
 }

@@ -1,7 +1,52 @@
 {
-  "form_name": "MEDICAL_FORM",
+  "form_name": "medical_registration",
   "fields": {
-    "first_name": { "required": true },
-    "last_name": { "required": true }
+    "first_name": {
+      "type": "string",
+      "required": true
+    },
+
+    "last_name": {
+      "type": "string",
+      "required": true
+    },
+
+    "date_of_birth": {
+      "type": "date",
+      "required": true
+    },
+
+    "has_allergies": {
+      "type": "boolean",
+      "required": true
+    },
+
+    "allergy_type": {
+      "type": "string",
+      "required": true,
+      "condition": {
+        "field": "has_allergies",
+        "equals": true
+      }
+    },
+
+    "takes_medication": {
+      "type": "boolean",
+      "required": true
+    },
+
+    "medication_name": {
+      "type": "string",
+      "required": true,
+      "condition": {
+        "field": "takes_medication",
+        "equals": true
+      }
+    },
+
+    "emergency_contact": {
+      "type": "string",
+      "required": true
+    }
   }
 }
