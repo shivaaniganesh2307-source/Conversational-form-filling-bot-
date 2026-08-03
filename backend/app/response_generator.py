@@ -1,40 +1,39 @@
-#say the message to the user 
-# Creates chatbot responses based on the action decided by the system
 class ResponseGenerator:
-    
-    def generate(self, action_plan, schema):
-        action = action_plan.get("action") #get what action needs to happen
-        #get the field that the action is related to 
-        target_field = action_plan.get("field")
-        field_label = target_field
-        if target_field in schema.get("fields", {}):
-            field_label = schema["fields"][target_field].get("label",target_field)
-        #handle validation errors 
-        if action == "CORRECT_VALIDATION_ERROR":
-            messages = action_plan.get("messages",[])
-            error_message = " ".join(messages)
-            return (
-                f"There is an issue with your "
-                f"{field_label}: {error_message}"
-            )
-        if action == "CONFIRM_LOW_CONFIDENCE":
-            value = action_plan.get(
-                "unconfirmed_value"
-            )
-            return (
-                f"Did you mean your {field_label} "
-                f"is '{value}'?"
-                " Please confirm or re-enter."
-            )
-        if action == "REQUEST_MISSING_FIELD":
-            return f"Please provide your {field_label}."
-        if action == "COMPLETE_FORM":
-            return (
-                "Thank you! "
-                "All required form details have been collected and saved."
-            )
+    def __init__(self):
+        # Friendly field names for better prompt readability
+        self.field_labels = {
+            "first_name": "first name",
+            "last_name": "last name",
+            "email": "email address",
+            "phone_number": "phone number",
+            "country": "country",
+            "is_student": "student status",
+            "university_name": "university name"
+        }
+
+    def generate(self, action_plan: dict, schema: dict) -> str:
+        action = action_plan.get("action")
+        target_field = action_plan.get("target_field")
+
+        # Get a user-friendly label if target_field is present
+        friendly_name = self.field_labels.get(target_field, target_field) if target_field else ""
+
+        if action == "ASK_MISSING_FIELD":
+            if friendly_name:
+                return f"Please provide your {friendly_name}."
+            return "Please provide the missing information to continue."
+
+        elif action == "CORRECT_FIELD":
+            errors = action_plan.get("errors", [])
+            error_msg = " ".join(errors) if errors else "invalid value."
+            return f"There is an issue with your {friendly_name}: {error_msg}"
+
+        elif action == "CONFIRM_LOW_CONFIDENCE":
+            val = action_plan.get("value")
+            return f"Just to confirm, is your {friendly_name} '{val}'?"
+
+        elif action == "COMPLETE_FORM":
+            return "Thank you! All information has been collected and your form submission is complete."
+
+        # Catch-all fallback
         return "How can I help you complete your form?"
-
-
-
-

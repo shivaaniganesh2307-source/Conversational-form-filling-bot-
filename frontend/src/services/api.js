@@ -1,6 +1,20 @@
-// Replace the domain below with your exact copied Port 5000 Forwarded Address from VS Code
 const API_BASE_URL = "http://127.0.0.1:5000/api";
 
+// Fetch available form schemas
+export async function getAvailableForms() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/forms`);
+    if (!response.ok) {
+      throw new Error(`Server status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("API Error fetching forms:", error);
+    return { forms: ["user_registration"] };
+  }
+}
+
+// Send user message to chatbot
 export async function sendChatMessage(sessionId, formName, message) {
   try {
     const response = await fetch(`${API_BASE_URL}/chat`, {

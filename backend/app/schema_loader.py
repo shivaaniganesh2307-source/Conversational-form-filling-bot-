@@ -1,57 +1,33 @@
 import os
 import json
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SCHEMAS_DIR = os.path.join(BASE_DIR, "schemas")
-
 class SchemaLoader:
-    def __init__(self, schemas_dir=SCHEMAS_DIR):
-        self.schemas_dir = schemas_dir
-        if not os.path.exists(self.schemas_dir):
-            os.makedirs(self.schemas_dir, exist_ok=True)
+    def __init__(self, schemas_dir=None):
+        if schemas_dir is None:
+            # Default directory pointing to your backend schemas folder
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            self.schemas_dir = os.path.join(base_dir, "schemas")
+        else:
+            self.schemas_dir = schemas_dir
 
-    def get_available_forms(self):
-        """Scans the schemas directory dynamically for any .json form schema."""
+    def get_available_forms(self) -> list:
+        """Scan schemas folder and return available form names."""
         if not os.path.exists(self.schemas_dir):
-            return []
+            return ["user_registration"]
         
         forms = []
         for filename in os.listdir(self.schemas_dir):
             if filename.endswith(".json"):
-                # Clean filename to standard form name
-                form_id = filename.rsplit(".", 1)[0].replace("_form", "")
-                forms.append(form_id)
-        return forms
+                form_name = filename.replace(".json", "")
+                forms.append(form_name)
+        
+        return forms if forms else ["user_registration"]
 
-    def load_schema(self, form_id):
-        """Loads schema JSON by searching for form_id variations."""
-        if not os.path.exists(self.schemas_dir):
-            return {"error": f"Form schema for '{form_id}' does not exist"}
-
-        possible_filenames = [
-            f"{form_id}.json",
-            f"{form_id}_form.json",
-            f"{form_id.lower()}.json",
-            f"{form_id.lower()}_form.json"
-        ]
-
-        for filename in possible_filenames:
-            filepath = os.path.join(self.schemas_dir, filename)
-            if os.path.exists(filepath):
-                try:
-                    with open(filepath, "r") as f:
-                        return json.load(f)
-                except json.JSONDecodeError:
-                    return {"error": f"Invalid JSON structure in '{filename}'"}
-
-        return {"error": f"Form schema for '{form_id}' does not exist"}
-
-    def add_form(self, form_id, schema_data):
-        """Saves a new schema dynamically to disk as a JSON file."""
-        if not os.path.exists(self.schemas_dir):
-            os.makedirs(self.schemas_dir, exist_ok=True)
-
-        filepath = os.path.join(self.schemas_dir, f"{form_id}.json")
-        with open(filepath, "w") as f:
-            json.dump(schema_data, f, indent=2)
-        return True
+    def load_schema(self, form_name: str) -> dict:
+        """Load specific schema json file."""
+        file_path = os.path.join(self.schemas_dir, f"{form_name}.json")
+        if not os.path.exists(file_path):
+            return {}
+        
+        with open(file_path, "r") as f:
+            return json.load(f)
