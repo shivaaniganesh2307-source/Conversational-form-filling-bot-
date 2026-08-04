@@ -1,5 +1,4 @@
 import os
-import pytest
 from app.schema_loader import SchemaLoader
 
 def test_dynamic_schema_discovery(tmp_path):
@@ -15,7 +14,7 @@ def test_dynamic_schema_discovery(tmp_path):
     # 3. Instantiate loader pointed at the temp directory
     loader = SchemaLoader(schemas_dir=str(custom_schema_dir))
     forms = loader.get_available_forms()
-
+    
     # 4. Assert that ANY discovered form names are returned dynamically
     assert "CUSTOM_A" in forms or "CUSTOM_A_FORM" in forms
     assert "XYZ_REGISTRATION" in forms

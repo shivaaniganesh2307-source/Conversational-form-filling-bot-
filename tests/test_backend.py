@@ -5,7 +5,6 @@ def test_process_endpoint_valid_payload(client):
         "session_id": "test_session_1",
         "message": "Hello, my email is test@example.com",
     }
-
     # Patch at psycopg2 level so ALL un-mocked DB calls anywhere in the request lifecycle return a dummy connection
     with patch("psycopg2.connect") as mock_connect:
         mock_conn = MagicMock()

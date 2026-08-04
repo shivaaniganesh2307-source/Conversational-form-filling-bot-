@@ -4,7 +4,6 @@ try:
 except ImportError:
     from backend.app.schema_loader import SchemaLoader
 
-
 class MissingFieldDetector:
     def get_missing_fields(self, form_name, state):
         # Load the form schema
