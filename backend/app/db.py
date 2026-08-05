@@ -9,7 +9,6 @@ DATABASE = os.getenv(
     "postgresql://postgres:intern@13.92.101.67:5432/postgres"
 )
 
-
 # Connect Flask to PostgreSQL
 def get_connection():
     return psycopg2.connect(DATABASE)
@@ -41,10 +40,6 @@ def init_tables():
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-                        CONSTRAINT fk_form
-                        FOREIGN KEY(form_id)
-                        REFERENCES form_schema(form_id)
-                        ON DELETE CASCADE
                     );
 
                     CREATE TABLE IF NOT EXISTS submissions (
@@ -97,7 +92,7 @@ def load_form_schema_from_db(form_id):
 # Retrieve saved conversation state
 def get_saved_conversation(session_id):
     conn = get_connection()
-    try:
+    try:  
         with conn.cursor() as cursor:
             cursor.execute(
                 """
@@ -122,6 +117,14 @@ def save_conversation(session_id, form_id, current_state):
         with conn.cursor() as cursor:
             cursor.execute(
                 """
+                INSERT INTO form_schema (form_id, form_name, json_schema)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (form_id) DO NOTHING;
+                """,
+                (form_id, form_id.replace('_', ' ').title(), Json({}))
+            )
+            cursor.execute(
+                """
                 INSERT INTO conversation_sessions
                 (
                     session_id,
@@ -135,6 +138,7 @@ def save_conversation(session_id, form_id, current_state):
                 DO UPDATE SET
                     form_id = EXCLUDED.form_id,
                     current_state = EXCLUDED.current_state,
+                    status = 'COLLECTING',
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (

@@ -4,17 +4,42 @@ import { getAvailableForms } from "./services/api";
 
 export default function App() {
   const [forms, setForms] = useState([]);
-  const [selectedForm, setSelectedForm] = useState("user_registration");
+  const [selectedForm, setSelectedForm] = useState("");
+  const [isSessionStarted, setIsSessionStarted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Fetch form list from backend on load
   useEffect(() => {
-    getAvailableForms().then((data) => {
-      if (data.forms && data.forms.length > 0) {
-        setForms(data.forms);
-        setSelectedForm(data.forms[0]);
+    async function loadForms() {
+      try {
+        const data = await getAvailableForms();
+        if (data.forms && data.forms.length > 0) {
+          setForms(data.forms);
+          setSelectedForm(data.forms[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load forms", err);
+      } finally {
+        setLoading(false);
       }
-    });
+    }
+    loadForms();
   }, []);
+
+  const handleStartSession = (e) => {
+    e.preventDefault();
+    if (selectedForm) {
+      setIsSessionStarted(true);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={styles.loadingScreen}>
+        Loading available forms...
+      </div>
+    );
+  }
 
   return (
     <div style={styles.appContainer}>
@@ -25,27 +50,57 @@ export default function App() {
           <span style={styles.brandTitle}>Plateau Form Assistant</span>
         </div>
 
-        {/* Dynamic Form Dropdown */}
-        <div style={styles.selectorContainer}>
-          <label style={styles.selectorLabel}>Form: </label>
-          <select 
-            value={selectedForm} 
-            onChange={(e) => setSelectedForm(e.target.value)}
-            style={styles.selectDropdown}
-          >
-            {forms.map((f) => (
-              <option key={f} value={f}>
-                {f.replace('_', ' ').toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Show selector in navbar only if session has started, with a switch option */}
+        {isSessionStarted && (
+          <div style={styles.selectorContainer}>
+            <span style={styles.activeFormIndicator}>
+              Active Form: <strong>{selectedForm.replace('_', ' ').toUpperCase()}</strong>
+            </span>
+            <button 
+              onClick={() => setIsSessionStarted(false)}
+              style={styles.switchButton}
+            >
+              Switch Form
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Main Content Area */}
       <main style={styles.mainContent}>
-        {/* Pass selectedForm dynamically instead of hardcoding */}
-        <ChatWindow key={selectedForm} formName={selectedForm} />
+        {!isSessionStarted ? (
+          /* --- LANDING VIEW FOR FORM SELECTION --- */
+          <div style={styles.landingCard}>
+            <h2 style={styles.landingTitle}>Select a Form to Begin</h2>
+            <p style={styles.landingText}>
+              Choose a dynamic registration or application schema from your backend to initialize your assistant session.
+            </p>
+
+            <form onSubmit={handleStartSession}>
+              <div style={styles.formControlGroup}>
+                <label style={styles.selectorLabel}>Available Forms:</label>
+                <select 
+                  value={selectedForm} 
+                  onChange={(e) => setSelectedForm(e.target.value)}
+                  style={styles.selectDropdownLanding}
+                >
+                  {forms.map((f) => (
+                    <option key={f} value={f}>
+                      {f.replace('_', ' ').toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button type="submit" style={styles.startButton}>
+                Start Session
+              </button>
+            </form>
+          </div>
+        ) : (
+          /* --- ACTIVE CHAT SESSION VIEW --- */
+          <ChatWindow key={selectedForm} formName={selectedForm} />
+        )}
       </main>
     </div>
   );
@@ -57,6 +112,15 @@ const styles = {
     backgroundColor: "#FAF9F8",
     display: "flex",
     flexDirection: "column",
+  },
+  loadingScreen: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100vh",
+    fontSize: "18px",
+    color: "#0B3B60",
+    fontWeight: "600",
   },
   navbar: {
     backgroundColor: "#FFFFFF",
@@ -93,22 +157,82 @@ const styles = {
   selectorContainer: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: "16px",
   },
-  selectorLabel: {
+  activeFormIndicator: {
     fontSize: "14px",
-    fontWeight: "600",
-    color: "#0B3B60",
+    color: "#334155",
   },
-  selectDropdown: {
+  switchButton: {
+    backgroundColor: "#F1F5F9",
+    color: "#0B3B60",
+    border: "1px solid #CBD5E1",
     padding: "6px 12px",
     borderRadius: "6px",
-    border: "1px solid #CBD5E1",
-    fontSize: "14px",
-    outline: "none",
+    fontSize: "13px",
+    fontWeight: "600",
+    cursor: "pointer",
   },
   mainContent: {
     flex: "1",
     padding: "20px",
+    display: "flex",
+    flexDirection: "column",
+  },
+  landingCard: {
+    maxWidth: "460px",
+    width: "100%",
+    margin: "80px auto",
+    padding: "32px",
+    backgroundColor: "#FFFFFF",
+    borderRadius: "12px",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+    border: "1px solid #E2E8F0",
+    textAlign: "center",
+  },
+  landingTitle: {
+    color: "#0B3B60",
+    fontSize: "22px",
+    fontWeight: "700",
+    marginBottom: "8px",
+  },
+  landingText: {
+    color: "#64748B",
+    fontSize: "14px",
+    lineHeight: "1.5",
+    marginBottom: "24px",
+  },
+  formControlGroup: {
+    textAlign: "left",
+    marginBottom: "20px",
+  },
+  selectorLabel: {
+    display: "block",
+    fontSize: "13px",
+    fontWeight: "600",
+    color: "#0B3B60",
+    marginBottom: "8px",
+  },
+  selectDropdownLanding: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: "6px",
+    border: "1px solid #CBD5E1",
+    fontSize: "14px",
+    outline: "none",
+    backgroundColor: "#FFFFFF",
+    boxSizing: "box-sizing",
+  },
+  startButton: {
+    width: "100%",
+    backgroundColor: "rgb(241, 176, 54)",
+    color: "#FFFFFF",
+    border: "none",
+    padding: "12px",
+    borderRadius: "6px",
+    fontSize: "15px",
+    fontWeight: "600",
+    cursor: "pointer",
+    boxShadow: "0 2px 4px rgba(241, 176, 54, 0.3)",
   },
 };

@@ -3,8 +3,13 @@ import { MessageList } from "./MessageList";
 import { sendChatMessage } from "../services/api";
 
 export function ChatWindow({ formName = "user_registration" }) {
+  // Generate a unique session ID per form lifecycle mount
+  //const [sessionId] = useState(() =>
+    //"session_" + Math.random().toString(36).substring(2, 9)
+  //);
+  // Generate a guaranteed unique session ID per form lifecycle mount
   const [sessionId] = useState(() =>
-    "session_" + Math.random().toString(36).substring(2, 9)
+    "session_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9)
   );
 
   const [inputMessage, setInputMessage] = useState("");
@@ -24,21 +29,47 @@ export function ChatWindow({ formName = "user_registration" }) {
     scrollToBottom();
   }, [messages, loading]);
 
+  // Initialize session and fetch the assistant's opening greeting
   useEffect(() => {
+    let isMounted = true;
+
     async function startSession() {
       setLoading(true);
-      const data = await sendChatMessage(sessionId, formName, "");
+      setMessages([]); // Clear old messages on form switch
+      setFormState({});
+      setValidationErrors({});
 
-      if (data.response) {
-        setMessages([{ sender: "bot", text: data.response }]);
+      try {
+        // Send an empty initial message to kick off the conversation workflow
+        const data = await sendChatMessage(sessionId, formName, "");
+
+        if (!isMounted) return;
+
+        if (data.response) {
+          setMessages([{ sender: "bot", text: data.response }]);
+        }
+        if (data.current_state) {
+          setFormState(data.current_state);
+        }
+        if (data.validation_errors) {
+          setValidationErrors(data.validation_errors);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setMessages([{ sender: "bot", text: "Unable to connect to the server." }]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      if (data.current_state) {
-        setFormState(data.current_state);
-      }
-      setLoading(false);
     }
 
     startSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, [sessionId, formName]);
 
   const handleSend = async (e) => {
@@ -48,22 +79,27 @@ export function ChatWindow({ formName = "user_registration" }) {
     const userText = inputMessage.trim();
     setInputMessage("");
 
+    // Optimistically add user message to chat UI
     setMessages((prev) => [...prev, { sender: "user", text: userText }]);
     setLoading(true);
 
-    const data = await sendChatMessage(sessionId, formName, userText);
+    try {
+      const data = await sendChatMessage(sessionId, formName, userText);
 
-    if (data.response) {
-      setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
+      if (data.response) {
+        setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
+      }
+      if (data.current_state) {
+        setFormState(data.current_state);
+      }
+      if (data.validation_errors) {
+        setValidationErrors(data.validation_errors);
+      }
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: "bot", text: "Error communicating with the server." }]);
+    } finally {
+      setLoading(false);
     }
-    if (data.current_state) {
-      setFormState(data.current_state);
-    }
-    if (data.validation_errors) {
-      setValidationErrors(data.validation_errors);
-    }
-
-    setLoading(false);
   };
 
   return (
@@ -139,12 +175,14 @@ const styles = {
     gap: "24px",
     maxWidth: "960px",
     margin: "30px auto",
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Inter, sans-serif",
+    width: "100%"
   },
   chatSection: {
     flex: "2",
     display: "flex",
-    flexDirection: "column"
+    flexDirection: "column",
+    minWidth: "0"
   },
   headerBar: {
     display: "flex",
@@ -172,7 +210,8 @@ const styles = {
     flex: "1",
     display: "flex",
     flexDirection: "column",
-    gap: "14px"
+    gap: "14px",
+    minWidth: "220px"
   },
   sideHeading: {
     fontSize: "18px",

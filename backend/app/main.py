@@ -54,6 +54,7 @@ confidence_engine = ConfidenceEngine()
 
 
 @app.route("/api/forms", methods=["GET"])
+@app.route("/api/forms/", methods=["GET"])
 def get_forms():
     """Dynamically return list of all available form names."""
     try:
@@ -82,11 +83,14 @@ def chat():
 
     # Load form schema dynamically based on selected form_name
     schema = schema_loader.load_schema(form_name)
+    print("Loaded schema:")
+    print(schema)
 
     # Load previous conversation state
     current_state = get_saved_conversation(session_id)
-    if not current_state:
+    if user_message == "" or not current_state:
         current_state = state_manager.create_empty_space(form_name)
+        save_conversation(session_id, form_name, current_state)
 
     # Detect current missing fields prior to extraction
     missing_fields = missing_detector.get_missing_fields(form_name, current_state)
@@ -113,15 +117,17 @@ def chat():
                 extracted_data = {target_field: user_str}
 
         current_state = state_manager.update_state(current_state, extracted_data)
-
+    
     # Validate fields against schema rules
     validation_errors = {}
     fields = schema.get("fields", {}) if isinstance(schema, dict) else {}
     for field_name, rules in fields.items():
         value = current_state.get(field_name)
-        errors = validator.validate_field(field_name, value, rules)
-        if errors:
-            validation_errors[field_name] = errors
+        if value is not None and value != "":
+            errors = validator.validate_field(field_name, value, rules)
+            if errors:
+                validation_errors[field_name] = errors
+
 
     # Re-detect missing fields & evaluate confidence
     missing_fields = missing_detector.get_missing_fields(form_name, current_state)
@@ -129,6 +135,11 @@ def chat():
     low_confidence_fields = confidence_engine.low_confidence_fields(confidence_scores)
 
     # Plan next question/action
+    print("\n------ DEBUG ------")
+    print("Current State:", current_state)
+    print("Missing Fields:", missing_fields)
+    print("Validation Errors:", validation_errors)
+    print("-------------------\n")
     action_plan = planner.next_question(
         validation_errors, missing_fields, low_confidence_fields
     )

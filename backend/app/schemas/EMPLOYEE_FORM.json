@@ -26,15 +26,7 @@
       "required": true
     },
 
-    "salary": {
-      "type": "number",
-      "required": true,
-      "condition": {
-        "field": "is_full_time",
-        "equals": true
-      }
-    },
-
+    
     "hourly_rate": {
       "type": "number",
       "required": true,
