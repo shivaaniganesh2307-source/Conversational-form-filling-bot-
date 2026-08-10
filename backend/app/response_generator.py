@@ -13,17 +13,19 @@ class ResponseGenerator:
 
     def generate(self, action_plan: dict, schema: dict) -> str:
         action = action_plan.get("action")
-        target_field = action_plan.get("target_field")
+        target_field = action_plan.get("target_field") or action_plan.get("field")
 
         # Get a user-friendly label if target_field is present
         friendly_name = self.field_labels.get(target_field, target_field) if target_field else ""
+        if action in ["ASK_MISSING_FIELD", "REQUEST_MISSING_FIELD"]:
 
-        if action == "ASK_MISSING_FIELD":
+        #if action == "ASK_MISSING_FIELD":
             if friendly_name:
                 return f"Please provide your {friendly_name}."
             return "Please provide the missing information to continue."
 
-        elif action == "CORRECT_FIELD":
+        elif action in ["CORRECT_FIELD", "CORRECT_VALIDATION_ERROR"]:
+        #elif action == "CORRECT_FIELD":
             errors = action_plan.get("errors", [])
             error_msg = " ".join(errors) if errors else "invalid value."
             return f"There is an issue with your {friendly_name}: {error_msg}"

@@ -28,7 +28,7 @@ except ImportError:
     )
     from backend.app.schema_loader import SchemaLoader
     from backend.app.extractor import LLMExtractor
-    from backend.app.validator import FormValidator
+    from backend.app.validator import FormValidator 
     from backend.app.response_generator import ResponseGenerator
     from backend.app.confidence_engine import ConfidenceEngine
     from backend.app.missing_field import MissingFieldDetector
@@ -44,13 +44,14 @@ except Exception as e:
     print(f"[WARNING] Could not initialize DB tables on import: {e}")
 
 extractor = LLMExtractor()
-validator = FormValidator()
+
 response_generator = ResponseGenerator()
 planner = Planner()
 state_manager = StateManager()
 missing_detector = MissingFieldDetector()
 schema_loader = SchemaLoader()
 confidence_engine = ConfidenceEngine()
+validator = FormValidator()
 
 
 @app.route("/api/forms", methods=["GET"])
@@ -85,6 +86,8 @@ def chat():
     schema = schema_loader.load_schema(form_name)
     print("Loaded schema:")
     print(schema)
+    #new
+    fields = schema.get("fields", {}) if isinstance(schema, dict) else {}
 
     # Load previous conversation state
     current_state = get_saved_conversation(session_id)
@@ -94,20 +97,16 @@ def chat():
 
     # Detect current missing fields prior to extraction
     missing_fields = missing_detector.get_missing_fields(form_name, current_state)
+    validation_errors = {}
 
     # Extract info if user sent a message
     if user_message != "":
-        try:
-            result = extractor.extract_fields(user_message, schema, missing_fields=missing_fields)
-        except TypeError:
-            result = extractor.extract_fields(user_message, schema)
-
+        result = extractor.extract_fields(user_message, schema)
         extracted_data = result.get("extracted_data", {})
-        
         # Smart Fallback logic
         if not extracted_data and missing_fields:
             user_str = user_message.strip()
-            
+                    
             if "@" in user_str and "." in user_str and "email" in missing_fields:
                 extracted_data = {"email": user_str}
             elif user_str.replace("-", "").replace("+", "").replace(" ", "").isdigit() and "phone_number" in missing_fields:
@@ -115,18 +114,37 @@ def chat():
             else:
                 target_field = missing_fields[0]
                 extracted_data = {target_field: user_str}
-
-        current_state = state_manager.update_state(current_state, extracted_data)
+        # Validate extracted values BEFORE saving them
+        for field_name, value in extracted_data.items():
+            rules = fields.get(field_name, {})
+            errors = validator.validate_field(
+            field_name,
+            value,
+            rules
+            )
+            if errors:
+                validation_errors[field_name] = errors
+            else:
+                current_state = state_manager.update_state(
+                    current_state,
+                    {
+                        field_name: value
+                    }
+                )
+    
+        
+        #current_state = state_manager.update_state(current_state, extracted_data)
     
     # Validate fields against schema rules
-    validation_errors = {}
-    fields = schema.get("fields", {}) if isinstance(schema, dict) else {}
+    #validation_errors = {}
+    #fields = schema.get("fields", {}) if isinstance(schema, dict) else {}
     for field_name, rules in fields.items():
         value = current_state.get(field_name)
         if value is not None and value != "":
             errors = validator.validate_field(field_name, value, rules)
             if errors:
                 validation_errors[field_name] = errors
+    #errors = FormValidator.validate_field(field_name, value, rules)
 
 
     # Re-detect missing fields & evaluate confidence

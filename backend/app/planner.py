@@ -1,31 +1,58 @@
 class Planner:
-    def next_question(self, validation_errors: dict, missing_fields: list, low_confidence_fields: list) -> dict:
-        # 1. Prioritize validation errors
+
+    def next_question(
+        self,
+        validation_errors,
+        missing_fields,
+        low_confidence_fields
+    ):
+
+        # --------------------------------
+        # 1. Validation error
+        # --------------------------------
+
         if validation_errors:
-            field_name = list(validation_errors.keys())[0]
+
+            field_name = list(
+                validation_errors.keys()
+            )[0]
+
             return {
-                "action": "CORRECT_FIELD",
+                "action": "CORRECT_VALIDATION_ERROR",
                 "target_field": field_name,
-                "errors": validation_errors[field_name]
+                "field" : field_name,
+                "messages": validation_errors[field_name]
             }
 
-        # 2. Ask for missing fields
+        # --------------------------------
+        # 2. Missing field
+        # --------------------------------
+
         if missing_fields:
+
             return {
-                "action": "ASK_MISSING_FIELD",
+                "action": "REQUEST_MISSING_FIELD",
                 "target_field": missing_fields[0]
             }
 
-        # 3. Confirm low confidence fields
+        # --------------------------------
+        # 3. Low confidence
+        # --------------------------------
+
         if low_confidence_fields:
-            field_name, val = low_confidence_fields[0]
+
+            field_name, value = low_confidence_fields[0]
+
             return {
                 "action": "CONFIRM_LOW_CONFIDENCE",
-                "target_field": field_name,
-                "value": val
+                "field": field_name,
+                "unconfirmed_value": value
             }
 
-        # 4. If all fields are present and valid, complete form
+        # --------------------------------
+        # 4. Everything complete
+        # --------------------------------
+
         return {
             "action": "COMPLETE_FORM"
         }

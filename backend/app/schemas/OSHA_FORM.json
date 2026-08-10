@@ -1,172 +1,137 @@
- {
- "OSHA_FORM": [
-    {
-      "id": "first_name",
-      "label": "First name",
-      "type": "name",
+{
+  "form_name": "osha_form",
+  "fields": {
+    "first_name": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "middle_name",
-      "label": "Middle name",
-      "type": "name",
+
+    "middle_name": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "last_name",
-      "label": "Last name",
-      "type": "name",
+
+    "last_name": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "uic",
-      "label": "UIC",
-      "type": "text",
-      "validation": "alphanumeric",
+
+    "uic": {
+      "type": "string",
+      "required": true,
+      "validation": "alphanumeric"
+    },
+
+    "street_name": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "street_name",
-      "label": "Street",
-      "type": "address",
+
+    "city": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "city",
-      "label": "City",
-      "type": "address",
+
+    "state": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "state",
-      "label": "State",
-      "type": "address",
+
+    "zipcode": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "zipcode",
-      "label": "Zipcode",
-      "type": "address",
-      "required": true
-    },
-    {
-      "id": "date_of_birth",
-      "label": "Date of birth",
+
+    "date_of_birth": {
       "type": "date",
       "required": true
     },
-    {
-      "id": "date_hired",
-      "label": "Date hired",
+
+    "date_hired": {
       "type": "date",
       "required": true
     },
-    {
-      "id": "date_of_injury_illness",
-      "label": "Date of injury/illness",
+
+    "date_of_injury_illness": {
       "type": "date",
       "required": true
     },
-    {
-      "id": "time_employee_started_work",
-      "label": "Time employee started work",
-      "type": "time",
+
+    "time_employee_started_work": {
+      "type": "string",
       "required": false
     },
-    {
-      "id": "time_of_event",
-      "label": "Time of event",
-      "type": "time",
+
+    "time_of_event": {
+      "type": "string",
       "required": false
     },
-    {
-      "id": "before_incident",
-      "label": "Before incident",
-      "type": "textarea",
+
+    "before_incident": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "what_happened",
-      "label": "What happened",
-      "type": "textarea",
+
+    "what_happened": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "gender",
-      "label": "Gender",
-      "type": "toggle",
-      "options": ["Male", "Female"],
+
+    "gender": {
+      "type": "string",
       "required": false
     },
-    {
-      "id": "name_of_physician",
-      "label": "Name of physician",
-      "type": "name",
+
+    "name_of_physician": {
+      "type": "string",
       "required": true
     },
-    {
-      "id": "facility",
-      "label": "Facility",
-      "type": "name",
+
+    "facility": {
+      "type": "string",
       "required": false
     },
-    {
-      "id": "faculty_street",
-      "label": "Faculty street",
-      "type": "address",
+
+    "facility_street": {
+      "type": "string",
+      "required": false
+    },
+
+    "facility_city": {
+      "type": "string",
       "required": false,
-      "Condition":[
-        {
-        "id": "faculty_city",
-        "label": "Faculty city",
-        "type": "address",
-        "required": true
-        },
-        {
-       "id": "faculty_state",
-       "label": "Faculty state",
-       "type": "address",
-       "required": true
-        }] 
+      "condition": {
+        "field": "facility_street",
+        "exists": true
+      }
     },
-    {
-      "id": "faculty_zipcode",
-      "label": "Faculty zipcode",
-      "type": "address",
-      "required": true
-    
+
+    "facility_state": {
+      "type": "string",
+      "required": false,
+      "condition": {
+        "field": "facility_street",
+        "exists": true
+      }
     },
-    {
-      "id": "faculty_city",
-      "label": "Faculty city",
-      "type": "address",
-      "required": false
+
+    "facility_zipcode": {
+      "type": "string",
+      "required": false,
+      "condition": {
+        "field": "facility_street",
+        "exists": true
+      }
     },
-    {
-      "id": "faculty_state",
-      "label": "Faculty state",
-      "type": "address",
-      "required": false
-    },
-    {
-      "id": "faculty_zipcode",
-      "label": "Faculty zipcode",
-      "type": "address",
-      "required": false
-    },
-    {
-      "id": "employee_treated_emergency_room",
-      "label": "Employee treated in emergency room",
-      "type": "toggle",
-      "options": ["Yes", "No"],
+
+    "employee_treated_emergency_room": {
+      "type": "boolean",
       "required": true
     },
-    {
-      "id": "employee_hospitalized_overnight",
-      "label": "Employee hospitalized overnight",
-      "type": "toggle",
-      "options": ["Yes", "No"],
+
+    "employee_hospitalized_overnight": {
+      "type": "boolean",
       "required": true
     }
-  ]
+  }
 }
