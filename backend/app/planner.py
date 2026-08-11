@@ -1,4 +1,10 @@
 class Planner:
+    """
+    Determines the next action based on the current
+    validation and form state.
+
+    This class does not know any specific field names.
+    """
 
     def next_question(
         self,
@@ -7,10 +13,15 @@ class Planner:
         low_confidence_fields
     ):
 
+        # ---------------------------------------------
         # 1. Fix validation errors first
+        # ---------------------------------------------
+
         if validation_errors:
 
-            field_name = list(validation_errors.keys())[0]
+            field_name = next(
+                iter(validation_errors)
+            )
 
             return {
                 "action": "CORRECT_VALIDATION_ERROR",
@@ -18,7 +29,10 @@ class Planner:
                 "messages": validation_errors[field_name]
             }
 
-        # 2. Ask for missing field
+        # ---------------------------------------------
+        # 2. Ask for missing required field
+        # ---------------------------------------------
+
         if missing_fields:
 
             return {
@@ -26,10 +40,15 @@ class Planner:
                 "field": missing_fields[0]
             }
 
-        # 3. Confirm low confidence
+        # ---------------------------------------------
+        # 3. Confirm low-confidence extraction
+        # ---------------------------------------------
+
         if low_confidence_fields:
 
-            field_name, value = low_confidence_fields[0]
+            field_name, value = (
+                low_confidence_fields[0]
+            )
 
             return {
                 "action": "CONFIRM_LOW_CONFIDENCE",
@@ -37,7 +56,10 @@ class Planner:
                 "unconfirmed_value": value
             }
 
+        # ---------------------------------------------
         # 4. Everything is complete
+        # ---------------------------------------------
+
         return {
             "action": "COMPLETE_FORM"
         }

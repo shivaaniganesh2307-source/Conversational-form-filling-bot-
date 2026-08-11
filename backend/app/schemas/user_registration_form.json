@@ -1,43 +1,25 @@
 {
-  "form_name": "user_registration",
+  "form_id": "user_registration_form",
+  "form_name": "User Registration",
   "fields": {
     "first_name": {
-      "type": "string",
-      "required": true
+      "label": "first name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
     },
-
     "last_name": {
-      "type": "string",
-      "required": true
+      "label": "last name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
     },
-
     "email": {
+      "label": "email address",
       "type": "email",
       "required": true
-    },
-
-    "phone_number": {
-      "type": "string",
-      "required": false
-    },
-
-    "country": {
-      "type": "string",
-      "required": true
-    },
-
-    "is_student": {
-      "type": "boolean",
-      "required": true
-    },
-
-    "university_name": {
-      "type": "string",
-      "required": true,
-      "condition": {
-        "field": "is_student",
-        "equals": true
-      }
     }
   }
 }

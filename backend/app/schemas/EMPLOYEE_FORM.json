@@ -1,53 +1,63 @@
 {
-  "form_name": "employee_onboarding",
+  "form_id": "employee_form",
+  "form_name": "Employee Form",
   "fields": {
     "first_name": {
-      "type": "string",
-      "required": true
+      "label": "first name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
     },
-
     "last_name": {
-      "type": "string",
-      "required": true
+      "label": "last name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
     },
-
     "employee_id": {
+      "label": "employee ID",
       "type": "string",
-      "required": true
+      "required": true,
+      "min_length": 3,
+      "max_length": 30,
+      "pattern": "^[A-Za-z0-9-]+$"
     },
-
     "department": {
+      "label": "department",
       "type": "string",
-      "required": true
+      "required": true,
+      "min_length": 2,
+      "max_length": 100
     },
-
-    "is_full_time": {
-      "type": "boolean",
-      "required": true
+    "age": {
+      "label": "age",
+      "type": "integer",
+      "required": true,
+      "min": 18,
+      "max": 100
     },
-
-    
     "hourly_rate": {
+      "label": "hourly rate",
       "type": "number",
       "required": true,
-      "condition": {
-        "field": "is_full_time",
-        "equals": false
-      }
+      "min": 0
     },
-
-    "needs_laptop": {
+    "is_full_time": {
+      "label": "whether you are a full-time employee",
       "type": "boolean",
       "required": true
     },
-
     "laptop_type": {
-      "type": "string",
+      "label": "laptop type",
+      "type": "choice",
       "required": true,
-      "condition": {
-        "field": "needs_laptop",
-        "equals": true
-      }
+      "choices": [
+        "Windows",
+        "Mac",
+        "Linux"
+      ]
     }
   }
 }

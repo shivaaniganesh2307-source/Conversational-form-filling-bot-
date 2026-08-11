@@ -1,6 +1,3 @@
-# Connects our application with Qwen LLM using Ollama
-# Extracts form answers from user messages and converts them into JSON
-
 import json
 import requests
 
@@ -8,8 +5,8 @@ import requests
 class LLMExtractor:
 
     def __init__(self):
-        # Ollama API address
         self.ollama_url = "http://localhost:11434/api/generate"
+        self.model = "qwen2.5:3b"
 
     def extract_fields(
         self,
@@ -19,262 +16,165 @@ class LLMExtractor:
         current_field=None
     ):
 
-        if current_state is None:
-            current_state = {}
+        current_state = (
+            current_state
+            if isinstance(current_state, dict)
+            else {}
+        )
 
         fields = schema.get("fields", {})
 
-        # Give Qwen only the useful information about each field
+        if not isinstance(fields, dict):
+            return {
+                "extracted_data": {},
+                "confidence_scores": {},
+                "intent": "chat"
+            }
+
+        # -----------------------------------------
+        # Build dynamic field information
+        # -----------------------------------------
+
         field_information = {}
 
         for field_name, rules in fields.items():
+
+            if not isinstance(rules, dict):
+                continue
+
             field_information[field_name] = {
-                "type": rules.get("type"),
-                "required": rules.get("required", False)
+                "label": rules.get("label", field_name),
+                "type": rules.get("type", "string"),
+                "required": rules.get("required", False),
+                "choices": rules.get("choices"),
+                "condition": rules.get("condition")
             }
 
-        prompt = f"""
-You are an intelligent conversational form-filling assistant.
+        # -----------------------------------------
+        # Only send fields that are useful
+        # -----------------------------------------
 
-Your job is to understand the user's message and determine
-whether they are providing information for a form.
+        relevant_state = {
+            field: value
+            for field, value in current_state.items()
+            if value not in [None, ""]
+        }
+
+        # -----------------------------------------
+        # Build prompt
+        # -----------------------------------------
+
+        prompt = f"""
+You extract information from a user's message and fill a form.
+
+Return ONLY valid JSON.
 
 FORM FIELDS:
-{json.dumps(field_information, indent=2)}
+{json.dumps(field_information, separators=(",", ":"))}
 
-CURRENT FORM STATE:
-{json.dumps(current_state, indent=2)}
+CURRENT VALUES:
+{json.dumps(relevant_state, separators=(",", ":"))}
 
-CURRENT FIELD BEING REQUESTED:
+CURRENT FIELD:
 {current_field}
 
 USER MESSAGE:
-"{user_message}"
+{user_message}
 
-Follow these rules carefully:
+RULES:
 
-1. Only extract information when the user is actually
-   providing information.
+1. Extract information explicitly provided by the user.
 
-2. The CURRENT FIELD BEING REQUESTED is very important.
+2. A user may provide multiple fields in one message.
 
-3. If the current field is "first_name" and the user says:
+3. Only return fields that exist in FORM FIELDS.
 
-   "Shivaani"
+4. Never invent information.
 
-   then extract:
+5. If the user provides a full name and the form contains separate
+   fields for first name and last name, split the full name into
+   those fields.
 
-   {{
-       "first_name": "Shivaani"
-   }}
+6. The CURRENT FIELD is the field the conversation is currently
+   asking about, so prioritize extracting that field.
 
-4. If the current field is "last_name" and the user says:
+7.However, the CURRENT FIELD does NOT restrict extraction.
+   If the user provides information for other form fields in
+   the same message, extract those fields too.
 
-   "Ganesh"
+8.Extract ALL clearly provided form information from the user's
+   message, even when the user answers more than one field at once.
 
-   then extract:
+9.If the user provides a person's name as an emergency contact,
+   contact, supervisor, parent, guardian, or similar relationship,
+   match it to the appropriate contact-name field in the schema.
 
-   {{
-       "last_name": "Ganesh"
-   }}
+10.If the user provides a phone number and the schema contains an
+   appropriate phone/contact-phone field, extract it.
 
-5. If the user says:
+11. Never ignore information simply because it is not related to
+    the CURRENT FIELD.
 
-   "my first name is Shivaani"
+12. Do not put the entire full name into first_name when a separate
+   last_name field exists.
 
-   extract:
+13. If the user provides multiple pieces of information in one
+   message, extract every piece that clearly matches a form field.
 
-   {{
-       "first_name": "Shivaani"
-   }}
+14. Evaluate each statement independently. One field being true
+   does not imply that another field is false.
 
-6. If the user says:
+15. If the user provides information about a field, assign it to
+   the appropriate field based on the field label and schema.
 
-   "my last name is Ganesh"
+16. If the user answers the current field with a short answer,
+   assign that answer to the current field.
 
-   extract:
+17. If the user says they do not know, want to skip, or will provide
+    the information later, do not invent a value.
 
-   {{
-       "last_name": "Ganesh"
-   }}
+18. For boolean fields, determine the value from the meaning of
+   the user's statement.
 
-7. If the user says:
+   A positive statement means true.
+   A negative statement means false.
 
-   "actually my first name is Sarah"
+   Examples:
+   "I have it" -> true
+   "I don't have it" -> false
+   "I take it" -> true
+   "I don't take it" -> false
+   "Yes" -> true
+   "No" -> false
 
-   this means they are correcting/updating their first name.
+   Pay attention to negation words such as:
+   don't, do not, doesn't, does not, never, no, none.
 
-   Extract:
+   Do not assume false merely because the user did not explicitly
+   say "yes".
 
-   {{
-       "first_name": "Sarah"
-   }}
+19. For number fields, return a number.
 
-   and use intent "update".
+20. Do not return fields with null values.
 
-8. If the user says something conversational such as:
+21. Do not return fields with empty string values.
 
-   "hello"
-   "hi"
-   "ok"
-   "thanks"
-   "help me"
-   "can I enter my first name again?"
-   "what do you need?"
+22. If the message contains no form information, return an empty
+    extracted_data object.
 
-   DO NOT put that sentence into a form field.
-
-9. If the user asks a question, do not treat the question
-   itself as a form answer.
-
-10. Never invent information.
-
-11. Never randomly assign a message to a field.
-
-12. If you are not confident that the user provided a value,
-   return an empty extracted_data object.
-
-13. If CURRENT FIELD BEING REQUESTED is "first_name" and the
-    user provides a normal-looking name such as "Shivaani",
-    treat it as the first name.
-
-14. If CURRENT FIELD BEING REQUESTED is "last_name" and the
-    user provides a normal-looking name such as "Ganesh",
-    treat it as the last name.
-
-15. If the user explicitly mentions a different field,
-    use that field instead.
-
-16. The intent must be one of:
-
-    "answer"
-    "update"
-    "chat"
-
-17. Return ONLY valid JSON.
-
-Examples:
-
-Example 1:
-
-CURRENT FIELD:
-first_name
-
-USER:
-Shivaani
-
-RETURN:
-
-{{
-    "extracted_data": {{
-        "first_name": "Shivaani"
-    }},
-    "confidence_scores": {{
-        "first_name": 0.95
-    }},
-    "intent": "answer"
-}}
-
-
-Example 2:
-
-CURRENT FIELD:
-first_name
-
-USER:
-my first name is Shivaani
-
-RETURN:
-
-{{
-    "extracted_data": {{
-        "first_name": "Shivaani"
-    }},
-    "confidence_scores": {{
-        "first_name": 0.98
-    }},
-    "intent": "answer"
-}}
-
-
-Example 3:
-
-CURRENT FIELD:
-first_name
-
-USER:
-actually change my first name to Sarah
-
-RETURN:
-
-{{
-    "extracted_data": {{
-        "first_name": "Sarah"
-    }},
-    "confidence_scores": {{
-        "first_name": 0.98
-    }},
-    "intent": "update"
-}}
-
-
-Example 4:
-
-CURRENT FIELD:
-first_name
-
-USER:
-hello
-
-RETURN:
+Return exactly:
 
 {{
     "extracted_data": {{}},
     "confidence_scores": {{}},
-    "intent": "chat"
-}}
-
-
-Example 5:
-
-CURRENT FIELD:
-first_name
-
-USER:
-can I enter my first name again?
-
-RETURN:
-
-{{
-    "extracted_data": {{}},
-    "confidence_scores": {{}},
-    "intent": "chat"
-}}
-
-
-Example 6:
-
-CURRENT FIELD:
-employee_id
-
-USER:
-12345
-
-RETURN:
-
-{{
-    "extracted_data": {{
-        "employee_id": "12345"
-    }},
-    "confidence_scores": {{
-        "employee_id": 0.98
-    }},
     "intent": "answer"
 }}
 
-Now analyze the user's message.
+intent must be one of:
 
-Return ONLY JSON.
+answer
+update
+chat
 """
 
         try:
@@ -282,49 +182,41 @@ Return ONLY JSON.
             response = requests.post(
                 self.ollama_url,
                 json={
-                    "model": "phi3:3.8b",
+                    "model": self.model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": "json"
+                    "format": "json",
+                    "options": {
+                        "temperature": 0
+                    }
                 },
-                timeout=30
+                timeout=120
             )
 
             response.raise_for_status()
 
             result = response.json()
 
-            answer = result.get("response", "{}").strip()
+            raw_response = result.get(
+                "response",
+                "{}"
+            ).strip()
 
-            print("\n========== QWEN RAW RESPONSE ==========")
-            print(answer)
-            print("========================================\n")
+            print("\n========== RAW LLM RESPONSE ==========")
+            print(raw_response)
+            print("=======================================\n")
 
-            # Remove markdown if Qwen returns ```json ... ```
-            if "```json" in answer:
-                answer = answer.split("```json", 1)[1]
-                answer = answer.split("```", 1)[0].strip()
+            parsed = json.loads(raw_response)
 
-            elif "```" in answer:
-                answer = answer.split("```", 1)[1]
-                answer = answer.split("```", 1)[0].strip()
-
-            parsed = json.loads(answer)
-
-            # Make sure Qwen returned a dictionary
             if not isinstance(parsed, dict):
-                raise ValueError("Qwen returned invalid JSON")
+                raise ValueError(
+                    "LLM response is not a JSON object"
+                )
 
             extracted_data = parsed.get(
                 "extracted_data",
                 {}
             )
-            # Only allow fields that actually exist in the schema
-            extracted_data = {
-                field_name: value
-                for field_name, value in extracted_data.items()
-                if field_name in fields
-            }
 
             confidence_scores = parsed.get(
                 "confidence_scores",
@@ -336,19 +228,68 @@ Return ONLY JSON.
                 "chat"
             )
 
-            # Safety checks
             if not isinstance(extracted_data, dict):
                 extracted_data = {}
 
             if not isinstance(confidence_scores, dict):
                 confidence_scores = {}
 
-            if intent not in [
+            # -----------------------------------------
+            # SECURITY:
+            # Only schema fields are allowed
+            # -----------------------------------------
+
+            extracted_data = {
+                field: value
+                for field, value in extracted_data.items()
+                if field in fields
+                and value not in [None, ""]
+            }
+
+            confidence_scores = {
+                field: score
+                for field, score in confidence_scores.items()
+                if field in extracted_data
+            }
+
+            # -----------------------------------------
+            # Normalize confidence
+            # -----------------------------------------
+
+            for field in list(confidence_scores.keys()):
+
+                try:
+                    score = float(
+                        confidence_scores[field]
+                    )
+
+                    confidence_scores[field] = max(
+                        0.0,
+                        min(1.0, score)
+                    )
+
+                except (TypeError, ValueError):
+
+                    confidence_scores.pop(
+                        field,
+                        None
+                    )
+
+            # -----------------------------------------
+            # Validate intent
+            # -----------------------------------------
+
+            if intent not in {
                 "answer",
                 "update",
                 "chat"
-            ]:
-                intent = "chat"
+            }:
+
+                intent = (
+                    "answer"
+                    if extracted_data
+                    else "chat"
+                )
 
             return {
                 "extracted_data": extracted_data,
@@ -356,11 +297,23 @@ Return ONLY JSON.
                 "intent": intent
             }
 
+        except requests.exceptions.Timeout:
+
+            print(
+                "[EXTRACTOR ERROR] Ollama request timed out."
+            )
+
+            return {
+                "extracted_data": {},
+                "confidence_scores": {},
+                "intent": "chat"
+            }
+
         except Exception as e:
 
-            print("\n========== QWEN ERROR ==========")
-            print(str(e))
-            print("=================================\n")
+            print(
+                f"[EXTRACTOR ERROR] {e}"
+            )
 
             return {
                 "extracted_data": {},

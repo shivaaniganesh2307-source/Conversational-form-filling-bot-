@@ -1,44 +1,69 @@
 {
-  "form_name": "medical_registration",
+  "form_id": "medical_form",
+  "form_name": "Medical Form",
   "fields": {
     "first_name": {
-      "type": "string",
-      "required": true
+      "label": "first name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
     },
     "last_name": {
-      "type": "string",
-      "required": true
+      "label": "last name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
     },
     "date_of_birth": {
+      "label": "date of birth",
       "type": "date",
+      "format": "%Y-%m-%d",
       "required": true
     },
     "has_allergies": {
+      "label": "whether you have allergies",
       "type": "boolean",
       "required": true
     },
-    "allergy_type": {
-      "type": "string",
+    "allergy_details": {
+      "label": "allergy details",
+      "type": "text",
       "required": true,
+      "min_length": 2,
+      "max_length": 500,
       "condition": {
         "field": "has_allergies",
-        "equals": "yes"
+        "equals": true
       }
     },
     "takes_medication": {
+      "label": "whether you take medication",
       "type": "boolean",
       "required": true
     },
-    "medication_name": {
-      "type": "string",
+    "medication_details": {
+      "label": "medication details",
+      "type": "text",
       "required": true,
+      "min_length": 2,
+      "max_length": 500,
       "condition": {
         "field": "takes_medication",
-        "equals": "yes"
+        "equals": true
       }
     },
-    "emergency_contact": {
-      "type": "string",
+    "emergency_contact_name": {
+      "label": "emergency contact name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 100
+    },
+    "emergency_contact_phone": {
+      "label": "emergency contact phone number",
+      "type": "phone",
       "required": true
     }
   }

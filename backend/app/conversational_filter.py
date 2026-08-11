@@ -1,28 +1,108 @@
+
 import re
 
-def normalize_user_input(field_name: str, raw_input: str) -> tuple[str, bool]:
-    """
-    Cleans up common conversational phrases, slang, or 'idk' 
-    before sending it to an LLM or validator.
-    Returns: (processed_value, is_handled_deterministically)
-    """
-    text = str(raw_input).strip().lower()
 
-    # 1. Handle "IDK" or skip intents for any field
-    skip_phrases = ["idk", "i don't know", "not sure", "skip", "none", "no idea"]
-    if text in skip_phrases:
-        return "NOT_PROVIDED", True  # Special flag your code can handle
+def normalize_user_input(
+    field_name: str,
+    raw_input: str
+) -> tuple[str, bool]:
 
-    # 2. Deterministic handling for Booleans (yes/no fields)
-    # This prevents wasting LLM tokens on simple yes/no questions!
-    yes_phrases = ["yes", "y", "yeah", "yep", "sure", "true", "i do", "of course"]
-    no_phrases = ["no", "n", "nope", "false", "i don't", "none"]
+    text = str(raw_input).strip()
 
-    if text in yes_phrases:
+    normalized = text.lower()
+
+    # --------------------------------------------------
+    # SKIP / UNKNOWN
+    # --------------------------------------------------
+
+    skip_phrases = {
+        "idk",
+        "i don't know",
+        "i do not know",
+        "not sure",
+        "skip",
+        "no idea",
+        "i have no idea",
+        "don't remember",
+        "do not remember",
+        "i don't remember",
+        "i do not remember",
+        "can we come back to it later",
+        "come back to it later"
+    }
+
+    if normalized in skip_phrases:
+
+        return "NOT_PROVIDED", True
+
+
+    # --------------------------------------------------
+    # YES
+    # --------------------------------------------------
+
+    yes_phrases = {
+        "yes",
+        "y",
+        "yeah",
+        "yep",
+        "sure",
+        "true",
+        "i do",
+        "of course"
+    }
+
+    if normalized in yes_phrases:
+
         return "yes", True
-    if text in no_phrases:
+
+
+    # --------------------------------------------------
+    # NO
+    # --------------------------------------------------
+
+    no_phrases = {
+        "no",
+        "n",
+        "nope",
+        "false",
+        "i don't",
+        "i do not",
+        "none"
+    }
+
+    if normalized in no_phrases:
+
         return "no", True
 
-    # If it's a regular text field (like name, department, etc.), 
-    # pass it through to your extractor/validator normally.
-    return raw_input, False
+
+    # --------------------------------------------------
+    # SIMPLE "YES/NO" SENTENCES
+    # --------------------------------------------------
+
+    if normalized in {
+        "yes please",
+        "yes please do",
+        "yes i am",
+        "yes i do"
+    }:
+
+        return "yes", True
+
+
+    if normalized in {
+        "no thanks",
+        "no thank you",
+        "no i am not",
+        "no i don't",
+        "no i do not"
+    }:
+
+        return "no", True
+
+
+    # --------------------------------------------------
+    # Otherwise let the LLM interpret it
+    # --------------------------------------------------
+
+    return text, False
+

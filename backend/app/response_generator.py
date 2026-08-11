@@ -1,31 +1,42 @@
 class ResponseGenerator:
 
-    def generate(self, action_plan, schema):
+    def generate(
+        self,
+        action_plan,
+        schema
+    ):
 
-        action = action_plan.get("action")
-
-        target_field = (
-            action_plan.get("field")
-            or action_plan.get("target_field")
+        action = action_plan.get(
+            "action"
         )
 
-        fields = schema.get("fields", {})
+        field_name = action_plan.get(
+            "field"
+        )
 
-        field_label = target_field
+        fields = schema.get(
+            "fields",
+            {}
+        )
+
+        label = field_name or "this information"
 
         if (
             isinstance(fields, dict)
-            and target_field in fields
-            and isinstance(fields[target_field], dict)
+            and field_name in fields
         ):
-            field_label = fields[target_field].get(
-                "label",
-                target_field
-            )
 
-        # -----------------------------
-        # Validation error
-        # -----------------------------
+            rules = fields[field_name]
+
+            if isinstance(rules, dict):
+
+                label = rules.get(
+                    "label",
+                    field_name.replace(
+                        "_",
+                        " "
+                    )
+                )
 
         if action == "CORRECT_VALIDATION_ERROR":
 
@@ -34,28 +45,18 @@ class ResponseGenerator:
                 []
             )
 
-            error_message = " ".join(messages)
-
             return (
                 f"There is an issue with your "
-                f"{field_label}: "
-                f"{error_message}"
+                f"{label}. "
+                f"{' '.join(messages)}"
             )
-
-        # -----------------------------
-        # Missing field
-        # -----------------------------
 
         if action == "REQUEST_MISSING_FIELD":
 
             return (
                 f"Please provide your "
-                f"{field_label}."
+                f"{label}."
             )
-
-        # -----------------------------
-        # Low confidence
-        # -----------------------------
 
         if action == "CONFIRM_LOW_CONFIDENCE":
 
@@ -65,21 +66,17 @@ class ResponseGenerator:
 
             return (
                 f"Did you mean your "
-                f"{field_label} is "
-                f"'{value}'? "
-                f"Please confirm or re-enter."
+                f"{label} is '{value}'?"
             )
-
-        # -----------------------------
-        # Complete
-        # -----------------------------
 
         if action == "COMPLETE_FORM":
 
             return (
-                "Thank you! "
-                "All required form details "
-                "have been collected and saved."
+                "Thank you. Your form has been "
+                "completed successfully."
             )
 
-        return "How can I help you complete your form?"
+        return (
+            "How can I help you complete "
+            "your form?"
+        )
