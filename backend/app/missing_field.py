@@ -9,7 +9,6 @@ class MissingFieldDetector:
     def get_missing_fields(self, form_name, state):
 
         loader = SchemaLoader()
-
         schema = loader.load_schema(form_name)
 
         if isinstance(schema, dict) and "error" in schema:
@@ -17,57 +16,43 @@ class MissingFieldDetector:
 
         missing_fields = []
 
-        fields = schema.get(
-            "fields",
-            {}
-        ) if isinstance(schema, dict) else {}
+        fields = schema.get("fields", {}) if isinstance(schema, dict) else {}
 
-        if isinstance(fields, dict):
+        if not isinstance(fields, dict):
+            return missing_fields
 
-            for field_name, rules in fields.items():
+        for field_name, rules in fields.items():
 
-                if not isinstance(rules, dict):
+            if not isinstance(rules, dict):
+                continue
+
+            # --------------------------------
+            # Check conditional field
+            # --------------------------------
+
+            condition = rules.get("condition")
+
+            if condition:
+
+                condition_field = condition.get("field")
+                expected_value = condition.get("equals")
+
+                actual_value = state.get(condition_field)
+
+                # If the condition is not satisfied,
+                # this field is not required right now.
+                if actual_value != expected_value:
                     continue
 
-                # --------------------------------
-                # Check conditional field
-                # --------------------------------
+            # --------------------------------
+            # Check required field
+            # --------------------------------
 
-                condition = rules.get("condition")
+            if rules.get("required") is True:
 
-                if condition:
+                value = state.get(field_name)
 
-                    condition_field = condition.get(
-                        "field"
-                    )
-
-                    expected_value = condition.get(
-                        "equals"
-                    )
-
-                    actual_value = state.get(
-                        condition_field
-                    )
-
-                    # Condition is NOT satisfied
-                    # Therefore this field is not required
-                    if actual_value != expected_value:
-                        continue
-
-                # --------------------------------
-                # Required field
-                # --------------------------------
-
-                if rules.get("required") is True:
-
-                    value = state.get(
-                        field_name
-                    )
-
-                    if value is None or value == "":
-
-                        missing_fields.append(
-                            field_name
-                        )
+                if value is None or value == "":
+                    missing_fields.append(field_name)
 
         return missing_fields

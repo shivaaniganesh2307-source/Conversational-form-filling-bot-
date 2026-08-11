@@ -5,45 +5,38 @@
       "type": "string",
       "required": true
     },
-
     "last_name": {
       "type": "string",
       "required": true
     },
-
     "date_of_birth": {
       "type": "date",
       "required": true
     },
-
     "has_allergies": {
       "type": "boolean",
       "required": true
     },
-
     "allergy_type": {
       "type": "string",
       "required": true,
       "condition": {
         "field": "has_allergies",
-        "equals": true
+        "equals": "yes"
       }
     },
-
     "takes_medication": {
       "type": "boolean",
       "required": true
     },
-
     "medication_name": {
       "type": "string",
       "required": true,
       "condition": {
         "field": "takes_medication",
-        "equals": true
+        "equals": "yes"
       }
     },
-
     "emergency_contact": {
       "type": "string",
       "required": true

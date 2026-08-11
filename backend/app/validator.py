@@ -19,7 +19,7 @@ def check_not_empty(field_name: str, value: Any) -> None:
             field_name,
             f"{field_name} cannot be empty."
         )
-
+'''
 
 def check_name(field_name: str, value: Any) -> None:
     """
@@ -46,6 +46,69 @@ def check_name(field_name: str, value: Any) -> None:
     letters_only = re.sub(r"[^A-Za-z]", "", value)
 
     if len(letters_only) < 2:
+        raise FieldValidationError(
+            field_name,
+            "That name is too short. Please enter your actual name."
+        )
+def check_name(field_name: str, value: Any) -> None:
+    """
+    Validate first and last names safely.
+    """
+    if value is None:
+        raise FieldValidationError(
+            field_name,
+            f"{field_name} cannot be empty."
+        )'''
+def check_name(field_name: str, value: Any) -> None:
+    value = str(value).strip().strip('"\'')
+
+    # Basic character check
+    if not re.fullmatch(r"[A-Za-z][A-Za-z' -]*", value):
+        raise FieldValidationError(
+            field_name,
+            "That doesn't look like a valid name. Please enter your actual name."
+        )
+
+    letters_only = re.sub(r"[^A-Za-z]", "", value)
+
+    if len(letters_only) < 2:
+        raise FieldValidationError(
+            field_name,
+            "That name is too short. Please enter your actual name."
+        )
+
+    # --- GIBBERISH / KEYBOARD SMASH DETECTOR ---
+    # Check if it lacks vowels completely (names usually have at least one vowel: a, e, i, o, u, y)
+    vowels = set("aeiouyAEIOUY")
+    has_vowel = any(char in vowels for char in letters_only)
+    
+    if not has_vowel and len(letters_only) > 2:
+        raise FieldValidationError(
+            field_name,
+            "That doesn't look like a real name. Please enter a valid name."
+        )
+
+    # Check for obvious keyboard smashes (e.g., 3 or more identical characters in a row like "dfgdddd")
+    if re.search(r"(.)\1{2,}", letters_only):
+        raise FieldValidationError(
+            field_name,
+            "That looks like a keyboard smash. Please enter your actual name."
+        )
+
+    # Convert to string and strip any accidental whitespace or quotes
+    value = str(value).strip().strip('"\'')
+
+    # Allow normal name characters (letters, spaces, hyphens, apostrophes)
+    if not re.fullmatch(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]*", value):
+        raise FieldValidationError(
+            field_name,
+            "That doesn't look like a valid name. Please enter your actual name."
+        )
+
+    # Remove non-letters for a safe length check
+    letters_only = re.sub(r"[^A-Za-zÀ-ÿ]", "", value)
+
+    if len(letters_only) < 1:
         raise FieldValidationError(
             field_name,
             "That name is too short. Please enter your actual name."
@@ -110,6 +173,21 @@ def check_number(field_name: str, value: Any) -> None:
             field_name,
             f"Please enter a valid number for {field_name}."
         )
+def check_department(field_name: str, value: Any) -> None:
+    value = str(value).strip()
+    
+    # Check for keyboard smashes or obvious gibberish (e.g., no vowels or alternating random letters)
+    letters_only = re.sub(r"[^A-Za-z]", "", value)
+    
+    if len(letters_only) < 2:
+        raise FieldValidationError(field_name, "Please enter a valid department name.")
+        
+    vowels = set("aeiouyAEIOUY")
+    if not any(char in vowels for char in letters_only):
+        raise FieldValidationError(field_name, "That doesn't look like a valid department. Please try again.")
+        
+    if re.search(r"(.)\1{2,}", letters_only):
+        raise FieldValidationError(field_name, "That looks like a keyboard smash. Please enter a real department.")
 
 
 class FormValidator:
@@ -145,8 +223,9 @@ class FormValidator:
         # --------------------------------
 
         field_type = rules.get("type")
+        if field_type == "name" or field_name in ["first_name", "last_name"]:
 
-        if field_name in ["first_name", "last_name"]:
+        #if field_name in ["first_name", "last_name"]:
 
             try:
                 check_name(field_name, value)
@@ -198,6 +277,11 @@ class FormValidator:
 
             except FieldValidationError as err:
                 errors.append(err.message)
+        if field_name == "department":
+            try:
+                check_department(field_name, value)
+            except FieldValidationError as err:
+                errors.append(err.message)
 
         # --------------------------------
         # 6. Minimum length
@@ -216,3 +300,4 @@ class FormValidator:
                 errors.append(err.message)
 
         return errors
+    

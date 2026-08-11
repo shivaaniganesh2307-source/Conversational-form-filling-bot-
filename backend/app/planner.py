@@ -7,38 +7,26 @@ class Planner:
         low_confidence_fields
     ):
 
-        # --------------------------------
-        # 1. Validation error
-        # --------------------------------
-
+        # 1. Fix validation errors first
         if validation_errors:
 
-            field_name = list(
-                validation_errors.keys()
-            )[0]
+            field_name = list(validation_errors.keys())[0]
 
             return {
                 "action": "CORRECT_VALIDATION_ERROR",
-                "target_field": field_name,
-                "field" : field_name,
+                "field": field_name,
                 "messages": validation_errors[field_name]
             }
 
-        # --------------------------------
-        # 2. Missing field
-        # --------------------------------
-
+        # 2. Ask for missing field
         if missing_fields:
 
             return {
                 "action": "REQUEST_MISSING_FIELD",
-                "target_field": missing_fields[0]
+                "field": missing_fields[0]
             }
 
-        # --------------------------------
-        # 3. Low confidence
-        # --------------------------------
-
+        # 3. Confirm low confidence
         if low_confidence_fields:
 
             field_name, value = low_confidence_fields[0]
@@ -49,10 +37,7 @@ class Planner:
                 "unconfirmed_value": value
             }
 
-        # --------------------------------
-        # 4. Everything complete
-        # --------------------------------
-
+        # 4. Everything is complete
         return {
             "action": "COMPLETE_FORM"
         }
