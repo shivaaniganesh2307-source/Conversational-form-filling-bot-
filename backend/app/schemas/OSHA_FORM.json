@@ -1,25 +1,26 @@
 {
-  "form_name": "osha_form",
+  "form_id": "osha_form",
+  "form_name": "OSHA Form",
   "fields": {
     "first_name": {
-      "type": "string",
+      "type": "name",
       "required": true
     },
 
     "middle_name": {
       "type": "string",
-      "required": true
+      "required": false
     },
 
     "last_name": {
-      "type": "string",
+      "type": "name",
       "required": true
     },
 
     "uic": {
       "type": "string",
       "required": true,
-      "validation": "alphanumeric"
+      "pattern": "^[A-Za-z0-9]+$"
     },
 
     "street_name": {

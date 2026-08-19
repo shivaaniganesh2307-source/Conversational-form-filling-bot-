@@ -1,21 +1,30 @@
 import React, { useState, useEffect } from "react";
 import { ChatWindow } from "./components/ChatWindow";
+import { MyForms } from "./components/MyForms";
 import { getAvailableForms } from "./services/api";
+import { rememberSession } from "./services/sessionStore";
+
+// view: "landing" | "chat" | "myforms"
 
 export default function App() {
   const [forms, setForms] = useState([]);
-  const [selectedForm, setSelectedForm] = useState("");
-  const [isSessionStarted, setIsSessionStarted] = useState(false);
+  const [selectedFormId, setSelectedFormId] = useState("");
+  const [view, setView] = useState("landing");
   const [loading, setLoading] = useState(true);
 
-  // Fetch form list from backend on load
+  // Active chat session details -- set either when starting a new
+  // form (fresh session id) or resuming one (from My Forms)
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [activeFormName, setActiveFormName] = useState("");
+  const [isResume, setIsResume] = useState(false);
+
   useEffect(() => {
     async function loadForms() {
       try {
         const data = await getAvailableForms();
         if (data.forms && data.forms.length > 0) {
           setForms(data.forms);
-          setSelectedForm(data.forms[0]);
+          setSelectedFormId(data.forms[0].id);
         }
       } catch (err) {
         console.error("Failed to load forms", err);
@@ -28,9 +37,34 @@ export default function App() {
 
   const handleStartSession = (e) => {
     e.preventDefault();
-    if (selectedForm) {
-      setIsSessionStarted(true);
-    }
+    if (!selectedFormId) return;
+
+    const formMeta = forms.find((f) => f.id === selectedFormId);
+    const formName = formMeta ? formMeta.name : selectedFormId;
+
+    const newSessionId =
+      "session_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+
+    rememberSession(newSessionId, selectedFormId, formName);
+
+    setActiveSessionId(newSessionId);
+    setActiveFormName(formName);
+    setIsResume(false);
+    setView("chat");
+  };
+
+  const handleResume = (sessionId, formId, formName) => {
+    setSelectedFormId(formId);
+    setActiveSessionId(sessionId);
+    setActiveFormName(formName);
+    setIsResume(true);
+    setView("chat");
+  };
+
+  const handleSwitchForm = () => {
+    setActiveSessionId(null);
+    setIsResume(false);
+    setView("landing");
   };
 
   if (loading) {
@@ -43,33 +77,34 @@ export default function App() {
 
   return (
     <div style={styles.appContainer}>
-      {/* Top Navbar */}
       <header style={styles.navbar}>
         <div style={styles.navBrand}>
           <div style={styles.logoBadge}>P</div>
           <span style={styles.brandTitle}>Plateau Form Assistant</span>
         </div>
 
-        {/* Show selector in navbar only if session has started, with a switch option */}
-        {isSessionStarted && (
-          <div style={styles.selectorContainer}>
-            <span style={styles.activeFormIndicator}>
-              Active Form: <strong>{selectedForm.replace('_', ' ').toUpperCase()}</strong>
-            </span>
-            <button 
-              onClick={() => setIsSessionStarted(false)}
-              style={styles.switchButton}
-            >
-              Switch Form
+        <div style={styles.navRight}>
+          {view === "chat" && (
+            <div style={styles.selectorContainer}>
+              <span style={styles.activeFormIndicator}>
+                Active Form: <strong>{activeFormName}</strong>
+              </span>
+              <button onClick={handleSwitchForm} style={styles.switchButton}>
+                Switch Form
+              </button>
+            </div>
+          )}
+
+          {view !== "myforms" && (
+            <button onClick={() => setView("myforms")} style={styles.myFormsButton}>
+              My Forms
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
-      {/* Main Content Area */}
       <main style={styles.mainContent}>
-        {!isSessionStarted ? (
-          /* --- LANDING VIEW FOR FORM SELECTION --- */
+        {view === "landing" && (
           <div style={styles.landingCard}>
             <h2 style={styles.landingTitle}>Select a Form to Begin</h2>
             <p style={styles.landingText}>
@@ -79,14 +114,14 @@ export default function App() {
             <form onSubmit={handleStartSession}>
               <div style={styles.formControlGroup}>
                 <label style={styles.selectorLabel}>Available Forms:</label>
-                <select 
-                  value={selectedForm} 
-                  onChange={(e) => setSelectedForm(e.target.value)}
+                <select
+                  value={selectedFormId}
+                  onChange={(e) => setSelectedFormId(e.target.value)}
                   style={styles.selectDropdownLanding}
                 >
                   {forms.map((f) => (
-                    <option key={f} value={f}>
-                      {f.replace('_', ' ').toUpperCase()}
+                    <option key={f.id} value={f.id}>
+                      {f.name}
                     </option>
                   ))}
                 </select>
@@ -97,9 +132,19 @@ export default function App() {
               </button>
             </form>
           </div>
-        ) : (
-          /* --- ACTIVE CHAT SESSION VIEW --- */
-          <ChatWindow key={selectedForm} formName={selectedForm} />
+        )}
+
+        {view === "myforms" && (
+          <MyForms onResume={handleResume} onBack={() => setView("landing")} />
+        )}
+
+        {view === "chat" && activeSessionId && (
+          <ChatWindow
+            key={activeSessionId}
+            sessionId={activeSessionId}
+            formName={selectedFormId}
+            isResume={isResume}
+          />
         )}
       </main>
     </div>
@@ -154,6 +199,11 @@ const styles = {
     fontWeight: "700",
     letterSpacing: "-0.01em",
   },
+  navRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+  },
   selectorContainer: {
     display: "flex",
     alignItems: "center",
@@ -168,6 +218,16 @@ const styles = {
     color: "#0B3B60",
     border: "1px solid #CBD5E1",
     padding: "6px 12px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+  myFormsButton: {
+    backgroundColor: "#0B3B60",
+    color: "#FFFFFF",
+    border: "none",
+    padding: "8px 16px",
     borderRadius: "6px",
     fontSize: "13px",
     fontWeight: "600",
@@ -221,7 +281,7 @@ const styles = {
     fontSize: "14px",
     outline: "none",
     backgroundColor: "#FFFFFF",
-    boxSizing: "box-sizing",
+    boxSizing: "border-box",
   },
   startButton: {
     width: "100%",

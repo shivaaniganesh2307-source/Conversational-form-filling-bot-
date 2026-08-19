@@ -1,82 +1,46 @@
 class ResponseGenerator:
 
-    def generate(
-        self,
-        action_plan,
-        schema
-    ):
+    def generate(self, action_plan, schema):
 
-        action = action_plan.get(
-            "action"
-        )
-
-        field_name = action_plan.get(
-            "field"
-        )
-
-        fields = schema.get(
-            "fields",
-            {}
-        )
+        action = action_plan.get("action")
+        field_name = action_plan.get("field")
+        fields = schema.get("fields", {})
 
         label = field_name or "this information"
+        rules = {}
 
-        if (
-            isinstance(fields, dict)
-            and field_name in fields
-        ):
-
-            rules = fields[field_name]
-
+        if isinstance(fields, dict) and field_name in fields:
+            rules = fields.get(field_name, {})
             if isinstance(rules, dict):
-
-                label = rules.get(
-                    "label",
-                    field_name.replace(
-                        "_",
-                        " "
-                    )
-                )
+                label = rules.get("label", field_name.replace("_", " "))
 
         if action == "CORRECT_VALIDATION_ERROR":
 
-            messages = action_plan.get(
-                "messages",
-                []
-            )
+            messages = action_plan.get("messages", [])
+            if not isinstance(messages, list):
+                messages = [str(messages)]
+            message = " ".join(str(message) for message in messages)
 
-            return (
-                f"There is an issue with your "
-                f"{label}. "
-                f"{' '.join(messages)}"
-            )
+            custom_message = rules.get("error_message") if isinstance(rules, dict) else None
+            if custom_message:
+                return str(custom_message)
+
+            return f"There is an issue with your {label}. {message}"
 
         if action == "REQUEST_MISSING_FIELD":
 
-            return (
-                f"Please provide your "
-                f"{label}."
-            )
+            custom_prompt = rules.get("prompt") if isinstance(rules, dict) else None
+            if custom_prompt:
+                return str(custom_prompt)
+
+            return f"Please provide your {label}."
 
         if action == "CONFIRM_LOW_CONFIDENCE":
 
-            value = action_plan.get(
-                "unconfirmed_value"
-            )
-
-            return (
-                f"Did you mean your "
-                f"{label} is '{value}'?"
-            )
+            value = action_plan.get("unconfirmed_value")
+            return f"Did you mean your {label} is '{value}'?"
 
         if action == "COMPLETE_FORM":
+            return "Thank you. Your form has been completed successfully."
 
-            return (
-                "Thank you. Your form has been "
-                "completed successfully."
-            )
-
-        return (
-            "How can I help you complete "
-            "your form?"
-        )
+        return "How can I help you complete your form?"

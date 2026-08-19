@@ -2,62 +2,13 @@
   "form_id": "employee_form",
   "form_name": "Employee Form",
   "fields": {
-    "first_name": {
-      "label": "first name",
-      "type": "name",
-      "required": true,
-      "min_length": 2,
-      "max_length": 50
-    },
-    "last_name": {
-      "label": "last name",
-      "type": "name",
-      "required": true,
-      "min_length": 2,
-      "max_length": 50
-    },
-    "employee_id": {
-      "label": "employee ID",
-      "type": "string",
-      "required": true,
-      "min_length": 3,
-      "max_length": 30,
-      "pattern": "^[A-Za-z0-9-]+$"
-    },
-    "department": {
-      "label": "department",
-      "type": "string",
-      "required": true,
-      "min_length": 2,
-      "max_length": 100
-    },
-    "age": {
-      "label": "age",
-      "type": "integer",
-      "required": true,
-      "min": 18,
-      "max": 100
-    },
-    "hourly_rate": {
-      "label": "hourly rate",
-      "type": "number",
-      "required": true,
-      "min": 0
-    },
-    "is_full_time": {
-      "label": "whether you are a full-time employee",
-      "type": "boolean",
-      "required": true
-    },
-    "laptop_type": {
-      "label": "laptop type",
-      "type": "choice",
-      "required": true,
-      "choices": [
-        "Windows",
-        "Mac",
-        "Linux"
-      ]
-    }
+    "first_name": {"label": "first name", "type": "name", "required": true, "min_length": 2, "max_length": 50},
+    "last_name": {"label": "last name", "type": "name", "required": true, "min_length": 2, "max_length": 50},
+    "employee_id": {"label": "employee ID", "type": "string", "required": true, "min_length": 3, "max_length": 30, "pattern": "^[A-Za-z0-9-]+$"},
+    "department": {"label": "department", "type": "string", "required": true, "min_length": 2, "max_length": 100},
+    "age": {"label": "age", "type": "integer", "required": true, "min": 18, "max": 100},
+    "hourly_rate": {"label": "hourly rate", "type": "number", "required": true, "min": 0},
+    "is_full_time": {"label": "whether you are a full-time employee", "type": "boolean", "required": true},
+    "laptop_type": {"label": "laptop type", "type": "choice", "required": true, "choices": ["Windows", "Mac", "Linux"]}
   }
 }

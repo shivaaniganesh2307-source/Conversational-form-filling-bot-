@@ -1,0 +1,146 @@
+{
+  "form_id": "vehicle_registration_form",
+  "form_name": "Vehicle Registration",
+  "fields": {
+    "owner_first_name": {
+      "label": "owner's first name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
+    },
+    "owner_last_name": {
+      "label": "owner's last name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
+    },
+    "owner_email": {
+      "label": "owner's email address",
+      "type": "email",
+      "required": true
+    },
+    "owner_phone": {
+      "label": "owner's phone number",
+      "type": "phone",
+      "required": true
+    },
+    "vehicle_make": {
+      "label": "vehicle make",
+      "type": "string",
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
+    },
+    "vehicle_model": {
+      "label": "vehicle model",
+      "type": "string",
+      "required": true,
+      "min_length": 1,
+      "max_length": 50
+    },
+    "vehicle_year": {
+      "label": "vehicle year",
+      "type": "integer",
+      "required": true,
+      "min": 1980,
+      "max": 2027
+    },
+    "vin": {
+      "label": "17-character VIN",
+      "type": "string",
+      "required": true,
+      "pattern": "^[A-HJ-NPR-Z0-9]{17}$"
+    },
+    "fuel_type": {
+      "label": "fuel type",
+      "type": "choice",
+      "required": true,
+      "choices": ["Gasoline", "Diesel", "Electric", "Hybrid", "Flex Fuel"]
+    },
+    "battery_capacity_kwh": {
+      "label": "battery capacity in kWh",
+      "type": "number",
+      "required": true,
+      "min": 0,
+      "condition": {
+        "field": "fuel_type",
+        "in": ["Electric", "Hybrid"]
+      }
+    },
+    "registration_type": {
+      "label": "registration type",
+      "type": "choice",
+      "required": true,
+      "choices": ["New Registration", "Renewal", "Title Transfer"]
+    },
+    "previous_owner_name": {
+      "label": "previous owner's name",
+      "type": "name",
+      "required": true,
+      "min_length": 2,
+      "max_length": 100,
+      "condition": {
+        "field": "registration_type",
+        "equals": "Title Transfer"
+      }
+    },
+    "insurance_policy_number": {
+      "label": "insurance policy number",
+      "type": "string",
+      "required": true,
+      "min_length": 3,
+      "max_length": 40,
+      "condition": {
+        "field": "registration_type",
+        "not_equals": "Renewal"
+      }
+    },
+    "has_lienholder": {
+      "label": "whether there is a lienholder on the vehicle",
+      "type": "boolean",
+      "required": true
+    },
+    "lienholder_name": {
+      "label": "lienholder's name",
+      "type": "string",
+      "required": true,
+      "min_length": 2,
+      "max_length": 100,
+      "condition": {
+        "field": "has_lienholder",
+        "equals": true
+      }
+    },
+    "lienholder_address": {
+      "label": "lienholder's address",
+      "type": "string",
+      "required": true,
+      "min_length": 5,
+      "max_length": 150,
+      "condition": {
+        "field": "lienholder_name",
+        "exists": true
+      }
+    },
+    "odometer_reading": {
+      "label": "current odometer reading",
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "inspection_date": {
+      "label": "date of last inspection",
+      "type": "date",
+      "format": "%Y-%m-%d",
+      "required": true
+    },
+    "registration_state": {
+      "label": "two-letter registration state",
+      "type": "string",
+      "required": true,
+      "pattern": "^[A-Z]{2}$"
+    }
+  }
+}

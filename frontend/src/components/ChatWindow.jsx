@@ -2,23 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import { MessageList } from "./MessageList";
 import { sendChatMessage } from "../services/api";
 
-export function ChatWindow({ formName = "user_registration" }) {
-  // Generate a unique session ID per form lifecycle mount
-  //const [sessionId] = useState(() =>
-    //"session_" + Math.random().toString(36).substring(2, 9)
-  //);
-  // Generate a guaranteed unique session ID per form lifecycle mount
-  const [sessionId] = useState(() =>
-    "session_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9)
-  );
+export function ChatWindow({ formName, sessionId, isResume }) {
 
   const [inputMessage, setInputMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [formState, setFormState] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  
-  // Ref for auto-scrolling
+  const [isComplete, setIsComplete] = useState(false);
+
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -29,30 +21,36 @@ export function ChatWindow({ formName = "user_registration" }) {
     scrollToBottom();
   }, [messages, loading]);
 
-  // Initialize session and fetch the assistant's opening greeting
   useEffect(() => {
     let isMounted = true;
 
     async function startSession() {
       setLoading(true);
-      setMessages([]); // Clear old messages on form switch
+      setMessages(
+        isResume
+          ? [{ sender: "bot", text: "Welcome back! Picking up where you left off..." }]
+          : []
+      );
       setFormState({});
       setValidationErrors({});
+      setIsComplete(false);
 
       try {
-        // Send an empty initial message to kick off the conversation workflow
         const data = await sendChatMessage(sessionId, formName, "");
 
         if (!isMounted) return;
 
         if (data.response) {
-          setMessages([{ sender: "bot", text: data.response }]);
+          setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
         }
         if (data.current_state) {
           setFormState(data.current_state);
         }
         if (data.validation_errors) {
           setValidationErrors(data.validation_errors);
+        }
+        if (data.action_plan?.action === "COMPLETE_FORM") {
+          setIsComplete(true);
         }
       } catch (err) {
         if (isMounted) {
@@ -74,12 +72,11 @@ export function ChatWindow({ formName = "user_registration" }) {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim() || loading) return;
+    if (!inputMessage.trim() || loading || isComplete) return;
 
     const userText = inputMessage.trim();
     setInputMessage("");
 
-    // Optimistically add user message to chat UI
     setMessages((prev) => [...prev, { sender: "user", text: userText }]);
     setLoading(true);
 
@@ -95,6 +92,9 @@ export function ChatWindow({ formName = "user_registration" }) {
       if (data.validation_errors) {
         setValidationErrors(data.validation_errors);
       }
+      if (data.action_plan?.action === "COMPLETE_FORM") {
+        setIsComplete(true);
+      }
     } catch (err) {
       setMessages((prev) => [...prev, { sender: "bot", text: "Error communicating with the server." }]);
     } finally {
@@ -104,7 +104,6 @@ export function ChatWindow({ formName = "user_registration" }) {
 
   return (
     <div style={styles.wrapper}>
-      {/* Left Side: Chat Interface */}
       <div style={styles.chatSection}>
         <div style={styles.headerBar}>
           <div style={styles.logoBadge}>P</div>
@@ -119,17 +118,17 @@ export function ChatWindow({ formName = "user_registration" }) {
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="Type your response..."
-            disabled={loading}
+            placeholder={isComplete ? "Form submitted" : "Type your response..."}
+            disabled={loading || isComplete}
             style={styles.input}
           />
           <button
             type="submit"
-            disabled={loading || !inputMessage.trim()}
+            disabled={loading || isComplete || !inputMessage.trim()}
             style={{
               ...styles.button,
-              opacity: loading || !inputMessage.trim() ? 0.6 : 1,
-              cursor: loading || !inputMessage.trim() ? "not-allowed" : "pointer"
+              opacity: loading || isComplete || !inputMessage.trim() ? 0.6 : 1,
+              cursor: loading || isComplete || !inputMessage.trim() ? "not-allowed" : "pointer"
             }}
           >
             {loading ? "..." : "Send"}
@@ -137,7 +136,6 @@ export function ChatWindow({ formName = "user_registration" }) {
         </form>
       </div>
 
-      {/* Right Side: Dynamic Form State Visualizer */}
       <div style={styles.sidePanel}>
         <h3 style={styles.sideHeading}>Form Progress</h3>
 

@@ -2,24 +2,8 @@
   "form_id": "user_registration_form",
   "form_name": "User Registration",
   "fields": {
-    "first_name": {
-      "label": "first name",
-      "type": "name",
-      "required": true,
-      "min_length": 2,
-      "max_length": 50
-    },
-    "last_name": {
-      "label": "last name",
-      "type": "name",
-      "required": true,
-      "min_length": 2,
-      "max_length": 50
-    },
-    "email": {
-      "label": "email address",
-      "type": "email",
-      "required": true
-    }
+    "first_name": {"label": "first name", "type": "name", "required": true, "min_length": 2, "max_length": 50},
+    "last_name": {"label": "last name", "type": "name", "required": true, "min_length": 2, "max_length": 50},
+    "email": {"label": "email address", "type": "email", "required": true}
   }
 }
