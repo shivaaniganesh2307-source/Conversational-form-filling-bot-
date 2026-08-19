@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MessageList } from "./MessageList";
+import { SectionProgress } from "./SectionProgress";
 import { sendChatMessage } from "../services/api";
 
 export function ChatWindow({ formName, sessionId, isResume }) {
@@ -10,6 +11,7 @@ export function ChatWindow({ formName, sessionId, isResume }) {
   const [validationErrors, setValidationErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [sections, setSections] = useState(null);
 
   const messagesEndRef = useRef(null);
 
@@ -20,6 +22,44 @@ export function ChatWindow({ formName, sessionId, isResume }) {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  const applyResponse = (data, appendBot = true) => {
+    if (data.response && appendBot) {
+      setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
+    }
+    if (data.current_state) {
+      setFormState(data.current_state);
+    }
+    if (data.validation_errors) {
+      setValidationErrors(data.validation_errors);
+    }
+    if (data.action_plan?.action === "COMPLETE_FORM") {
+      setIsComplete(true);
+    }
+    // sections is present (even if null) whenever the backend knows
+    // about this form -- explicitly set it so a non-sectioned form
+    // correctly clears out any stale progress bar.
+    setSections(data.sections ?? null);
+  };
+
+  // For a sectioned form, show fields from any section that's either
+  // complete or currently active -- so the panel only ever grows as
+  // you make progress, and going BACK to edit an earlier part
+  // doesn't make later, already-filled sections disappear from view.
+  // Forms without sections show the full state, unchanged.
+  const visibleFormState = (() => {
+    if (!sections) return formState;
+
+    const visibleFieldNames = new Set(
+      sections
+        .filter((s) => s.complete || s.active)
+        .flatMap((s) => s.fields || [])
+    );
+
+    return Object.fromEntries(
+      Object.entries(formState).filter(([key]) => visibleFieldNames.has(key))
+    );
+  })();
 
   useEffect(() => {
     let isMounted = true;
@@ -34,24 +74,12 @@ export function ChatWindow({ formName, sessionId, isResume }) {
       setFormState({});
       setValidationErrors({});
       setIsComplete(false);
+      setSections(null);
 
       try {
         const data = await sendChatMessage(sessionId, formName, "");
-
         if (!isMounted) return;
-
-        if (data.response) {
-          setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
-        }
-        if (data.current_state) {
-          setFormState(data.current_state);
-        }
-        if (data.validation_errors) {
-          setValidationErrors(data.validation_errors);
-        }
-        if (data.action_plan?.action === "COMPLETE_FORM") {
-          setIsComplete(true);
-        }
+        applyResponse(data);
       } catch (err) {
         if (isMounted) {
           setMessages([{ sender: "bot", text: "Unable to connect to the server." }]);
@@ -82,19 +110,24 @@ export function ChatWindow({ formName, sessionId, isResume }) {
 
     try {
       const data = await sendChatMessage(sessionId, formName, userText);
+      applyResponse(data);
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: "bot", text: "Error communicating with the server." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (data.response) {
-        setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
-      }
-      if (data.current_state) {
-        setFormState(data.current_state);
-      }
-      if (data.validation_errors) {
-        setValidationErrors(data.validation_errors);
-      }
-      if (data.action_plan?.action === "COMPLETE_FORM") {
-        setIsComplete(true);
-      }
+  const handleNavigateSection = async (targetIndex) => {
+    if (loading || isComplete) return;
+    setLoading(true);
+
+    try {
+      // Navigation via the progress bar doesn't go through the text
+      // input -- send an empty message with target_section set, and
+      // don't echo a "You" bubble for it (nothing was actually typed).
+      const data = await sendChatMessage(sessionId, formName, "", targetIndex);
+      applyResponse(data);
     } catch (err) {
       setMessages((prev) => [...prev, { sender: "bot", text: "Error communicating with the server." }]);
     } finally {
@@ -109,6 +142,10 @@ export function ChatWindow({ formName, sessionId, isResume }) {
           <div style={styles.logoBadge}>P</div>
           <h2 style={styles.heading}>Conversational Assistant</h2>
         </div>
+
+        {sections && (
+          <SectionProgress sections={sections} onNavigate={handleNavigateSection} />
+        )}
 
         <MessageList messages={messages} loading={loading} />
         <div ref={messagesEndRef} />
@@ -142,7 +179,7 @@ export function ChatWindow({ formName, sessionId, isResume }) {
         <div style={styles.card}>
           <h4 style={styles.cardTitle}>Collected Data</h4>
           <pre style={styles.jsonBox}>
-            {JSON.stringify(formState, null, 2)}
+            {JSON.stringify(visibleFormState, null, 2)}
           </pre>
         </div>
 

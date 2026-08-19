@@ -1,6 +1,24 @@
 {
   "form_id": "vehicle_registration_form",
   "form_name": "Vehicle Registration",
+  "sections": [
+    {
+      "name": "Owner Information",
+      "fields": ["owner_first_name", "owner_last_name", "owner_email", "owner_phone"]
+    },
+    {
+      "name": "Vehicle Details",
+      "fields": ["vehicle_make", "vehicle_model", "vehicle_year", "vin", "fuel_type", "battery_capacity_kwh"]
+    },
+    {
+      "name": "Registration & Lienholder",
+      "fields": ["registration_type", "previous_owner_name", "insurance_policy_number", "has_lienholder", "lienholder_name", "lienholder_address"]
+    },
+    {
+      "name": "Inspection & State",
+      "fields": ["odometer_reading", "inspection_date", "registration_state"]
+    }
+  ],
   "fields": {
     "owner_first_name": {
       "label": "owner's first name",

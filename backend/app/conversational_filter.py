@@ -47,6 +47,28 @@ def is_skip_phrase(text: str) -> bool:
     return any(pattern.match(normalized) for pattern in DECLINE_PATTERNS)
 
 
+GO_BACK_PHRASES = {
+    "go back", "back", "previous", "previous section", "previous part",
+    "let's go back", "lets go back", "can i go back", "i want to go back",
+    "take me back", "return to", "go back to previous section"
+}
+
+
+def looks_like_go_back_request(text: str) -> bool:
+    """Detects a request to navigate to an earlier section of a
+    multi-part form -- used only for forms that declare 'sections' in
+    their schema. Deterministic phrase-check, not an LLM call, since
+    navigation intent should never depend on a small model guessing
+    correctly."""
+
+    normalized = str(text).strip().lower()
+
+    if normalized in GO_BACK_PHRASES:
+        return True
+
+    return normalized.startswith("go back") or normalized.startswith("take me back")
+
+
 def normalize_user_input(field_name: str, raw_input: str):
 
     text = str(raw_input).strip()

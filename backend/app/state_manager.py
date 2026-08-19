@@ -25,6 +25,12 @@ class StateManager:
                 if field_name:
                     state[field_name] = None
 
+        # Forms that declare "sections" get a section pointer, stored
+        # under a reserved key so it persists the same way any other
+        # field does, with no database changes required.
+        if isinstance(schema.get("sections"), list) and schema["sections"]:
+            state["__section_index__"] = 0
+
         return state
 
     # Backward-compatible alias for old call sites.

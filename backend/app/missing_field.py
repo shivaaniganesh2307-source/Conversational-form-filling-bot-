@@ -12,7 +12,7 @@ class MissingFieldDetector:
         "condition": {"field": "country", "in": ["US", "CA"]}
     """
 
-    def _condition_met(self, condition, state):
+    def condition_met(self, condition, state):
 
         if not isinstance(condition, dict):
             return True
@@ -70,7 +70,7 @@ class MissingFieldDetector:
                 continue
 
             condition = rules.get("condition")
-            if condition and not self._condition_met(condition, state):
+            if condition and not self.condition_met(condition, state):
                 # Condition not satisfied -- this field isn't
                 # applicable right now, so don't ask for it.
                 continue

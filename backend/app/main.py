@@ -110,6 +110,10 @@ def chat():
     session_id = data.get("session_id")
     form_name = data.get("form_name")
     user_message = str(data.get("message", "")).strip()
+    target_section = data.get("target_section")
+
+    if target_section is not None and not isinstance(target_section, int):
+        target_section = None
 
     if not session_id:
         return jsonify({"error": "session_id is required"}), 400
@@ -117,7 +121,7 @@ def chat():
     if not form_name:
         return jsonify({"error": "form_name is required"}), 400
 
-    result = engine.process(session_id, form_name, user_message)
+    result = engine.process(session_id, form_name, user_message, target_section=target_section)
 
     if "error" in result:
         return jsonify(result), 500

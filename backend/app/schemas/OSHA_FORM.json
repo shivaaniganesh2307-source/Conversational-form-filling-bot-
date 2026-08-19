@@ -1,6 +1,24 @@
 {
   "form_id": "osha_form",
   "form_name": "OSHA Form",
+  "sections": [
+    {
+      "name": "Personal Information",
+      "fields": ["first_name", "middle_name", "last_name", "date_of_birth", "gender"]
+    },
+    {
+      "name": "Employment & Address",
+      "fields": ["uic", "date_hired", "street_name", "city", "state", "zipcode"]
+    },
+    {
+      "name": "Incident Details",
+      "fields": ["date_of_injury_illness", "time_employee_started_work", "time_of_event", "before_incident", "what_happened"]
+    },
+    {
+      "name": "Medical Treatment & Facility",
+      "fields": ["name_of_physician", "facility", "facility_street", "facility_city", "facility_state", "facility_zipcode", "employee_treated_emergency_room", "employee_hospitalized_overnight"]
+    }
+  ],
   "fields": {
     "first_name": {
       "type": "name",

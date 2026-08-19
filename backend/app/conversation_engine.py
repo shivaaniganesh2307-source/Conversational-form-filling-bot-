@@ -13,7 +13,12 @@ from .missing_field import MissingFieldDetector
 from .planner import Planner
 from .response_generator import ResponseGenerator
 from .confidence_engine import ConfidenceEngine
-from .conversational_filter import normalize_user_input, is_skip_phrase
+from .conversational_filter import (
+    normalize_user_input,
+    is_skip_phrase,
+    looks_like_go_back_request
+)
+from . import sections as sections_module
 
 
 # Words that suggest the user is trying to go back and fix something
@@ -38,9 +43,7 @@ def _mentions_a_filled_field(message, schema, current_state):
     been filled in (by its label or its field name with underscores
     turned into spaces) -- e.g. "for fuel type i use gas" mentions
     the already-filled "fuel_type" field even though it contains none
-    of the generic correction keywords above. This is a more reliable
-    signal for "the user wants to touch this field" than keyword
-    guessing alone, and it's schema-driven so it works for any form.
+    of the generic correction keywords above.
     """
 
     lowered = message.lower()
@@ -67,10 +70,7 @@ def _mentions_a_filled_field(message, schema, current_state):
 def _message_mentions_other_field(message, schema, exclude_field):
     """
     Same idea as _mentions_a_filled_field, but checks ANY field
-    (filled or not) other than exclude_field. Used to decide whether
-    it's safe to assume a bare answer belongs to the field currently
-    being asked about, or whether the user seems to be talking about
-    something else entirely.
+    (filled or not) other than exclude_field.
     """
 
     lowered = message.lower()
@@ -94,13 +94,43 @@ def _message_mentions_other_field(message, schema, exclude_field):
     return False
 
 
+def _find_mentioned_field_names(message, schema):
+    """
+    Returns every field name whose label (or field name with
+    underscores turned into spaces) is directly named in the message.
+    Used to give a correction a narrow, targeted extraction scope
+    instead of falling back to the entire schema -- naming a specific
+    field should mean "look at this field", not "look at all 24".
+    """
+
+    lowered = message.lower()
+    fields = schema.get("fields", {})
+    mentioned = set()
+
+    if not isinstance(fields, dict):
+        return mentioned
+
+    for field_name, rules in fields.items():
+
+        label = field_name.replace("_", " ")
+        if isinstance(rules, dict):
+            label = rules.get("label", label)
+
+        if label.lower() in lowered or field_name.replace("_", " ").lower() in lowered:
+            mentioned.add(field_name)
+
+    return mentioned
+
+
 class ConversationEngine:
     """
     The single source of truth for "what happens on one chat turn".
 
-    This used to be duplicated (and out of sync) between this file
-    and main.py. main.py now just calls process() -- all the actual
-    logic lives here exactly once.
+    Forms may optionally declare "sections" in their schema to break a
+    large form into named parts (see sections.py). This is fully
+    opt-in per form -- a schema with no "sections" key behaves
+    exactly as it always has, section-related code paths simply never
+    trigger.
     """
 
     def __init__(self):
@@ -114,10 +144,7 @@ class ConversationEngine:
         self.confidence_engine = ConfidenceEngine()
 
     def _validate_state(self, fields, state):
-        """Re-validate every non-empty field currently in state.
-        Used both before and after processing a message so the
-        notion of 'current field' and the planner's own priority
-        (validation error beats missing field) always agree."""
+        """Re-validate every non-empty field currently in state."""
 
         errors = {}
 
@@ -135,7 +162,170 @@ class ConversationEngine:
 
         return errors
 
-    def process(self, session_id, form_name, user_message):
+    def _scope_to_section(self, schema, state, missing_fields_full, validation_errors_full):
+        """If this form uses sections, restrict missing_fields and
+        validation_errors down to just the active section's fields.
+        Forms without sections get the full, unscoped lists back
+        unchanged."""
+
+        if not sections_module.has_sections(schema):
+            return missing_fields_full, validation_errors_full
+
+        section_index = sections_module.get_current_section_index(state)
+        section_field_names = set(sections_module.get_section_fields(schema, section_index))
+
+        scoped_missing = [f for f in missing_fields_full if f in section_field_names]
+        scoped_errors = {
+            k: v for k, v in validation_errors_full.items() if k in section_field_names
+        }
+
+        return scoped_missing, scoped_errors
+
+    def _get_extractable_optional_fields(self, schema, state):
+        """
+        Optional (non-required) fields that are still empty. These
+        are never something the bot proactively ASKS about (that stays
+        governed entirely by missing_fields, i.e. required fields
+        only) -- but they should still be ACCEPTABLE if the user
+        volunteers the info unprompted, e.g. mentioning gender in the
+        same breath as their name even though gender isn't required.
+
+        Scoped to the active section when this form uses sections, so
+        it doesn't reintroduce "many fields at once" -- an optional
+        field from a later section still isn't offered until that
+        section is reached.
+        """
+
+        fields = schema.get("fields", {})
+
+        if sections_module.has_sections(schema):
+            section_index = sections_module.get_current_section_index(state)
+            allowed_names = set(sections_module.get_section_fields(schema, section_index))
+        else:
+            allowed_names = None
+
+        optional_fields = []
+
+        for field_name, rules in fields.items():
+
+            if not isinstance(rules, dict):
+                continue
+
+            if rules.get("required", False):
+                continue
+
+            if allowed_names is not None and field_name not in allowed_names:
+                continue
+
+            value = state.get(field_name)
+            if value not in (None, ""):
+                continue
+
+            condition = rules.get("condition")
+            if condition and not self.missing_detector.condition_met(condition, state):
+                continue
+
+            optional_fields.append(field_name)
+
+        return optional_fields
+
+    def _respond(
+        self,
+        schema,
+        fields,
+        current_state,
+        session_id,
+        form_name,
+        status,
+        action_plan=None,
+        response_prefix="",
+        extracted_data_for_confidence=None
+    ):
+        """
+        Shared tail-end of process(): recompute validation/missing
+        state, decide (or accept a pre-decided) action_plan, generate
+        the response text, persist, and build the returned dict. Used
+        by every exit path -- normal answers, section transitions,
+        and explicit navigation -- so there's exactly one place that
+        decides "what does the user see next".
+        """
+
+        uses_sections = sections_module.has_sections(schema)
+
+        validation_errors_full = self._validate_state(fields, current_state)
+        missing_fields_full = self.missing_detector.get_missing_fields(
+            schema=schema, state=current_state
+        )
+
+        confidence_scores = self.confidence_engine.confidence_evaluation(
+            extracted_data_for_confidence or {}
+        )
+        low_confidence_fields = self.confidence_engine.low_confidence_fields(confidence_scores)
+
+        if action_plan is None:
+
+            scoped_missing, scoped_errors = self._scope_to_section(
+                schema, current_state, missing_fields_full, validation_errors_full
+            )
+
+            if uses_sections:
+
+                section_index = sections_module.get_current_section_index(current_state)
+                section_complete = not scoped_missing and not scoped_errors
+                is_last = sections_module.is_last_section(schema, section_index)
+
+                if section_complete and not is_last:
+                    action_plan = {
+                        "action": "CONFIRM_SECTION_ADVANCE",
+                        "current_section": sections_module.get_section_name(schema, section_index),
+                        "next_section": sections_module.get_section_name(schema, section_index + 1)
+                    }
+                elif section_complete and is_last:
+                    # Last section done -- completion depends on the
+                    # WHOLE form, not just this section (covers the
+                    # rare case of a field not assigned to any section).
+                    if not missing_fields_full and not validation_errors_full:
+                        action_plan = {"action": "COMPLETE_FORM"}
+                    else:
+                        action_plan = self.planner.next_question(
+                            validation_errors_full, missing_fields_full, []
+                        )
+                else:
+                    action_plan = self.planner.next_question(
+                        scoped_errors, scoped_missing, low_confidence_fields
+                    )
+            else:
+                action_plan = self.planner.next_question(
+                    validation_errors_full, missing_fields_full, low_confidence_fields
+                )
+
+        response_text = response_prefix + self.response_generator.generate(action_plan, schema)
+
+        save_conversation(session_id, form_name, current_state)
+
+        if action_plan.get("action") == "COMPLETE_FORM" and status != "COMPLETED":
+            save_submission(session_id, current_state)
+            status = "COMPLETED"
+
+        if uses_sections:
+            report_missing, report_errors = self._scope_to_section(
+                schema, current_state, missing_fields_full, validation_errors_full
+            )
+        else:
+            report_missing, report_errors = missing_fields_full, validation_errors_full
+
+        return {
+            "response": response_text,
+            "current_state": sections_module.strip_internal_keys(current_state),
+            "validation_errors": report_errors,
+            "action_plan": action_plan,
+            "missing_fields": report_missing,
+            "sections": sections_module.build_section_progress(
+                schema, current_state, missing_fields_full, validation_errors_full
+            )
+        }
+
+    def process(self, session_id, form_name, user_message, target_section=None):
 
         # ----------------------------------------------------
         # LOAD SCHEMA
@@ -151,6 +341,8 @@ class ConversationEngine:
         if not isinstance(fields, dict):
             return {"error": "Schema fields must be an object."}
 
+        uses_sections = sections_module.has_sections(schema)
+
         # ----------------------------------------------------
         # LOAD STATE + STATUS
         # ----------------------------------------------------
@@ -162,10 +354,13 @@ class ConversationEngine:
 
         status = get_session_status(session_id)
 
+        just_created = False
+
         if not current_state:
             current_state = self.state_manager.create_empty_state(schema)
             save_conversation(session_id, form_name, current_state)
             status = "COLLECTING"
+            just_created = True
 
         # ----------------------------------------------------
         # GUARD: don't let a completed form keep re-submitting
@@ -174,52 +369,163 @@ class ConversationEngine:
         if status == "COMPLETED" and user_message:
             return {
                 "response": "This form has already been submitted. Thank you!",
-                "current_state": current_state,
+                "current_state": sections_module.strip_internal_keys(current_state),
                 "validation_errors": {},
                 "action_plan": {"action": "COMPLETE_FORM"},
-                "missing_fields": []
+                "missing_fields": [],
+                "sections": sections_module.build_section_progress(
+                    schema, current_state, [], {}
+                )
             }
 
         # ----------------------------------------------------
-        # FIND CURRENT FIELD
+        # INTRO MESSAGE for a brand-new sectioned form
+        # ----------------------------------------------------
+
+        if uses_sections and just_created and not user_message:
+            sections_list = sections_module.get_sections(schema)
+            intro = (
+                f"This form is broken into {len(sections_list)} parts. "
+                f"Let's start with {sections_module.get_section_name(schema, 0)}. "
+            )
+            return self._respond(
+                schema, fields, current_state, session_id, form_name, status,
+                response_prefix=intro
+            )
+
+        # ----------------------------------------------------
+        # EXPLICIT SECTION NAVIGATION (progress-bar button click)
+        # ----------------------------------------------------
+
+        if uses_sections and target_section is not None:
+            sections_list = sections_module.get_sections(schema)
+            if isinstance(target_section, int) and 0 <= target_section < len(sections_list):
+                current_state = sections_module.set_current_section_index(
+                    current_state, target_section
+                )
+                target_name = sections_module.get_section_name(schema, target_section)
+                return self._respond(
+                    schema, fields, current_state, session_id, form_name, status,
+                    response_prefix=f"Sure, here's {target_name}. "
+                )
+            # invalid index -- ignore and fall through to normal processing
+
+        # ----------------------------------------------------
+        # FIND CURRENT FIELD (section-scoped when applicable)
         #
         # This MUST use the same priority the planner uses when it
         # picks what to show the user (validation error first, then
         # missing field) -- otherwise "current_field" can silently
         # point at a different field than the one the user was
-        # actually just asked about, and any raw/ambiguous answer
-        # gets attributed to the wrong place.
+        # actually just asked about.
         # ----------------------------------------------------
 
-        pre_validation_errors = self._validate_state(fields, current_state)
-
-        missing_fields = self.missing_detector.get_missing_fields(
-            schema=schema,
-            state=current_state
+        pre_validation_errors_full = self._validate_state(fields, current_state)
+        missing_fields_full = self.missing_detector.get_missing_fields(
+            schema=schema, state=current_state
         )
 
-        if pre_validation_errors:
-            current_field = next(iter(pre_validation_errors))
-        elif missing_fields:
-            current_field = missing_fields[0]
+        pre_missing, pre_errors = self._scope_to_section(
+            schema, current_state, missing_fields_full, pre_validation_errors_full
+        )
+
+        if pre_errors:
+            current_field = next(iter(pre_errors))
+        elif pre_missing:
+            current_field = pre_missing[0]
         else:
             current_field = None
 
-        validation_errors = {}
-        extracted_data = {}
-        intent = "chat"
+        # ----------------------------------------------------
+        # SECTION TRANSITION HANDLING
+        #
+        # If the active section has nothing left to fill/fix and
+        # there's a next section, the incoming message is first
+        # checked as a possible answer to "ready to move on?" before
+        # anything else happens.
+        # ----------------------------------------------------
+
+        if (
+            uses_sections
+            and user_message
+            and current_field is None
+            and not sections_module.is_last_section(
+                schema, sections_module.get_current_section_index(current_state)
+            )
+        ):
+            section_index = sections_module.get_current_section_index(current_state)
+
+            if looks_like_go_back_request(user_message):
+                target = sections_module.resolve_go_back_target(
+                    schema, section_index, user_message
+                )
+                current_state = sections_module.set_current_section_index(current_state, target)
+                target_name = sections_module.get_section_name(schema, target)
+                return self._respond(
+                    schema, fields, current_state, session_id, form_name, status,
+                    response_prefix=f"Sure, taking you back to {target_name}. "
+                )
+
+            cleaned, handled = normalize_user_input("_section_confirm", user_message)
+
+            if handled and cleaned in ("yes", "true"):
+                new_index = section_index + 1
+                current_state = sections_module.set_current_section_index(current_state, new_index)
+                new_name = sections_module.get_section_name(schema, new_index)
+                return self._respond(
+                    schema, fields, current_state, session_id, form_name, status,
+                    response_prefix=f"Great job! Let's move on to {new_name}. "
+                )
+
+            if handled and cleaned in ("no", "false"):
+                return self._respond(
+                    schema, fields, current_state, session_id, form_name, status,
+                    action_plan={"action": "SECTION_ADVANCE_DECLINED"}
+                )
+
+            if handled:
+                # Recognized as some other fixed response (e.g. a
+                # skip phrase) that doesn't clearly mean yes or no --
+                # just re-show the confirmation question.
+                return self._respond(
+                    schema, fields, current_state, session_id, form_name, status,
+                    action_plan={
+                        "action": "CONFIRM_SECTION_ADVANCE",
+                        "current_section": sections_module.get_section_name(schema, section_index),
+                        "next_section": sections_module.get_section_name(schema, section_index + 1)
+                    }
+                )
+
+            # Not handled as yes/no/skip -- fall through and treat
+            # this as a normal message (e.g. a correction) within the
+            # current, already-complete section.
 
         # ----------------------------------------------------
-        # PROCESS USER MESSAGE
+        # GO-BACK REQUEST MID-SECTION (not just at a transition point)
         # ----------------------------------------------------
+
+        if uses_sections and user_message and looks_like_go_back_request(user_message):
+            section_index = sections_module.get_current_section_index(current_state)
+            target = sections_module.resolve_go_back_target(schema, section_index, user_message)
+            current_state = sections_module.set_current_section_index(current_state, target)
+            target_name = sections_module.get_section_name(schema, target)
+            return self._respond(
+                schema, fields, current_state, session_id, form_name, status,
+                response_prefix=f"Sure, taking you back to {target_name}. "
+            )
+
+        # ----------------------------------------------------
+        # NORMAL MESSAGE PROCESSING
+        # ----------------------------------------------------
+
+        extracted_data = {}
+        intent = "chat"
 
         if user_message:
 
             handled = False
 
-            # Deterministic yes/no handling for boolean fields --
-            # skips the LLM call entirely for the common case,
-            # which is both faster and cheaper.
+            # Deterministic yes/no handling for boolean fields.
             if current_field:
 
                 current_rules = fields.get(current_field, {})
@@ -227,8 +533,7 @@ class ConversationEngine:
                 if current_rules.get("type") == "boolean":
 
                     cleaned_value, handled = normalize_user_input(
-                        current_field,
-                        user_message
+                        current_field, user_message
                     )
 
                     if handled:
@@ -243,19 +548,42 @@ class ConversationEngine:
 
             if not handled:
 
-                # Normally only describe still-missing fields to the
-                # model (cheap). If the message looks like a
-                # correction to something already filled, widen the
-                # scope to the whole form just for this turn so the
-                # model can actually see the field being corrected.
-                extraction_scope = (
-                    None
-                    if (
-                        _looks_like_a_correction(user_message)
-                        or _mentions_a_filled_field(user_message, schema, current_state)
-                    )
-                    else missing_fields
+                # Normal scope = required-missing fields (what the bot
+                # is actively asking about) PLUS still-empty optional
+                # fields (things the user is allowed to volunteer even
+                # though the bot won't ask for them). This is what
+                # lets "I am a female" register for an optional gender
+                # field without the bot ever needing to nag for it.
+                normal_scope = pre_missing + self._get_extractable_optional_fields(
+                    schema, current_state
                 )
+
+                is_correction = (
+                    _looks_like_a_correction(user_message)
+                    or _mentions_a_filled_field(user_message, schema, current_state)
+                )
+
+                if is_correction:
+                    # A correction gets a NARROW scope, not the whole
+                    # form: the current section's fields (so a normal
+                    # answer still works) plus whatever specific
+                    # field the message actually names (so correcting
+                    # something from an earlier, already-completed
+                    # section still works by naming it directly).
+                    # This keeps corrections targeted instead of
+                    # dumping all fields from every section into one
+                    # call, which would defeat the whole point of
+                    # sections.
+                    mentioned = _find_mentioned_field_names(user_message, schema)
+                    extraction_scope = list(set(normal_scope) | mentioned)
+
+                    if not extraction_scope:
+                        # Correction language with nothing identifiable
+                        # to scope to (rare) -- fall back to the full
+                        # form as a last resort.
+                        extraction_scope = None
+                else:
+                    extraction_scope = normal_scope
 
                 result = self.extractor.extract_fields(
                     user_message=user_message,
@@ -268,21 +596,10 @@ class ConversationEngine:
                 extracted_data = result.get("extracted_data", {})
                 intent = result.get("intent", "chat")
 
-            # --------------------------------------------------------
-            # RAW-VALUE FALLBACK
-            #
-            # A small local model sometimes fails to map a short,
-            # unqualified answer onto the field currently being asked
-            # about. If nothing was extracted for the current field,
-            # the message doesn't look like "skip" and doesn't
-            # mention some other field by name, and it's short enough
-            # to plausibly be a single direct answer, treat the raw
-            # message itself as the answer to the current field. It
-            # still goes through the normal validator below, so a
-            # genuinely bad answer just produces the same "please
-            # correct this" flow as always.
-            # --------------------------------------------------------
-
+            # Raw-value fallback: if nothing was extracted for the
+            # field currently being asked about, and the message is
+            # short, doesn't look like a decline, and doesn't mention
+            # some other field, treat the raw message as the answer.
             if (
                 current_field
                 and current_field not in extracted_data
@@ -306,73 +623,14 @@ class ConversationEngine:
 
                 errors = self.validator.validate_field(field_name, value, rules)
 
-                # Always persist the attempt, valid or not. An invalid
-                # value needs to survive into the next turn so it gets
-                # picked up again by _validate_state() above --
-                # otherwise a pending correction (like a bad VIN) is
-                # forgotten the moment this response is sent, and the
-                # next turn's "current field" silently drifts to
-                # whatever the next missing field happens to be.
                 current_state = self.state_manager.update_state(
-                    current_state,
-                    {field_name: value}
+                    current_state, {field_name: value}
                 )
 
-                if errors:
-                    validation_errors[field_name] = errors
+                # (errors are recomputed authoritatively in _respond
+                # via _validate_state -- no need to track them here)
 
-        # ----------------------------------------------------
-        # RE-VALIDATE FULL STATE (authoritative, post-update)
-        # ----------------------------------------------------
-
-        validation_errors = self._validate_state(fields, current_state)
-
-        # ----------------------------------------------------
-        # FIND MISSING FIELDS (post-update)
-        # ----------------------------------------------------
-
-        missing_fields = self.missing_detector.get_missing_fields(
-            schema=schema,
-            state=current_state
+        return self._respond(
+            schema, fields, current_state, session_id, form_name, status,
+            extracted_data_for_confidence=extracted_data
         )
-
-        # ----------------------------------------------------
-        # CONFIDENCE
-        # ----------------------------------------------------
-
-        confidence_scores = self.confidence_engine.confidence_evaluation(
-            extracted_data
-        )
-
-        low_confidence_fields = self.confidence_engine.low_confidence_fields(
-            confidence_scores
-        )
-
-        # ----------------------------------------------------
-        # PLAN + RESPONSE
-        # ----------------------------------------------------
-
-        action_plan = self.planner.next_question(
-            validation_errors,
-            missing_fields,
-            low_confidence_fields
-        )
-
-        response = self.response_generator.generate(action_plan, schema)
-
-        # ----------------------------------------------------
-        # SAVE STATE
-        # ----------------------------------------------------
-
-        save_conversation(session_id, form_name, current_state)
-
-        if action_plan.get("action") == "COMPLETE_FORM" and status != "COMPLETED":
-            save_submission(session_id, current_state)
-
-        return {
-            "response": response,
-            "current_state": current_state,
-            "validation_errors": validation_errors,
-            "action_plan": action_plan,
-            "missing_fields": missing_fields
-        }

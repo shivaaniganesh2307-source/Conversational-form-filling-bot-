@@ -40,6 +40,22 @@ class ResponseGenerator:
             value = action_plan.get("unconfirmed_value")
             return f"Did you mean your {label} is '{value}'?"
 
+        if action == "CONFIRM_SECTION_ADVANCE":
+
+            current_section = action_plan.get("current_section", "this part")
+            next_section = action_plan.get("next_section", "the next part")
+            return (
+                f"That completes {current_section}. "
+                f"Ready to move on to {next_section}? (yes/no)"
+            )
+
+        if action == "SECTION_ADVANCE_DECLINED":
+
+            return (
+                "No problem -- let me know if you'd like to change "
+                "anything, or say \"continue\" when you're ready to move on."
+            )
+
         if action == "COMPLETE_FORM":
             return "Thank you. Your form has been completed successfully."
 
