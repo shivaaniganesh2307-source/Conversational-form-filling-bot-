@@ -1,0 +1,87 @@
+{
+  "MEDICAL_FORM": [
+    {
+      "id": "first_name",
+      "label": "First name",
+      "type": "name",
+      "required": true
+    },
+    {
+      "id": "last_name",
+      "label": "Last name",
+      "type": "name",
+      "required": true
+    },
+    {
+      "id": "date_of_birth",
+      "label": "Date of birth",
+      "type": "date",
+      "required": true
+    },
+    {
+      "id": "gender",
+      "label": "Gender",
+      "type": "toggle",
+      "options": ["Male", "Female"],
+      "condition": {
+        "id": "pregnant",
+        "label": "Are you pregnant?",
+        "type": "toggle",
+        "options": ["Yes", "No"],
+        "required": true
+      }
+    },
+    {
+      "id": "address",
+      "label": "Address",
+      "type": "address",
+      "required": true
+    },
+    {
+      "id": "phone_number",
+      "label": "Phone number",
+      "type": "text",
+      "validation": "phone",
+      "required": true
+    },
+    {
+      "id": "email",
+      "label": "Email",
+      "type": "text",
+      "validation": "email",
+      "required": true
+    },
+    {
+      "id": "medical_history",
+      "label": "Medical history",
+      "type": "textarea",
+      "required": false
+    },
+    {
+      "id": "current_medications",
+      "label": "Current medications",
+      "type": "textarea",
+      "required": false
+    },
+    {
+      "id": "allergies",
+      "label": "Allergies",
+      "type": "textarea",
+      "required": false,
+      "condition":[{
+      "id": "emergency_contact_name",
+      "label": "Emergency contact name",
+      "type": "name",
+      "required": true
+     },
+     {
+      "id": "emergency_contact_relationship",
+      "label": "Emergency contact relationship",
+      "type": "text",
+      "required": true
+     }
+     ]
+    }
+  ]
+}
+    

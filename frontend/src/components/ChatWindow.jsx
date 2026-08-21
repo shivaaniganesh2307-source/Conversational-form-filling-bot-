@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MessageList } from "./MessageList";
+import { SectionProgress } from "./SectionProgress";
 import { sendChatMessage } from "../services/api";
 
-export function ChatWindow({ formName = "user_registration" }) {
-  const [sessionId] = useState(() =>
-    "session_" + Math.random().toString(36).substring(2, 9)
-  );
+export function ChatWindow({ formName, sessionId, isResume }) {
 
   const [inputMessage, setInputMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [formState, setFormState] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  
-  // Ref for auto-scrolling
+  const [isComplete, setIsComplete] = useState(false);
+  const [sections, setSections] = useState(null);
+
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -24,36 +23,8 @@ export function ChatWindow({ formName = "user_registration" }) {
     scrollToBottom();
   }, [messages, loading]);
 
-  useEffect(() => {
-    async function startSession() {
-      setLoading(true);
-      const data = await sendChatMessage(sessionId, formName, "");
-
-      if (data.response) {
-        setMessages([{ sender: "bot", text: data.response }]);
-      }
-      if (data.current_state) {
-        setFormState(data.current_state);
-      }
-      setLoading(false);
-    }
-
-    startSession();
-  }, [sessionId, formName]);
-
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || loading) return;
-
-    const userText = inputMessage.trim();
-    setInputMessage("");
-
-    setMessages((prev) => [...prev, { sender: "user", text: userText }]);
-    setLoading(true);
-
-    const data = await sendChatMessage(sessionId, formName, userText);
-
-    if (data.response) {
+  const applyResponse = (data, appendBot = true) => {
+    if (data.response && appendBot) {
       setMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
     }
     if (data.current_state) {
@@ -62,18 +33,119 @@ export function ChatWindow({ formName = "user_registration" }) {
     if (data.validation_errors) {
       setValidationErrors(data.validation_errors);
     }
+    if (data.action_plan?.action === "COMPLETE_FORM") {
+      setIsComplete(true);
+    }
+    // sections is present (even if null) whenever the backend knows
+    // about this form -- explicitly set it so a non-sectioned form
+    // correctly clears out any stale progress bar.
+    setSections(data.sections ?? null);
+  };
 
-    setLoading(false);
+  // For a sectioned form, show fields from any section that's either
+  // complete or currently active -- so the panel only ever grows as
+  // you make progress, and going BACK to edit an earlier part
+  // doesn't make later, already-filled sections disappear from view.
+  // Forms without sections show the full state, unchanged.
+  const visibleFormState = (() => {
+    if (!sections) return formState;
+
+    const visibleFieldNames = new Set(
+      sections
+        .filter((s) => s.complete || s.active)
+        .flatMap((s) => s.fields || [])
+    );
+
+    return Object.fromEntries(
+      Object.entries(formState).filter(([key]) => visibleFieldNames.has(key))
+    );
+  })();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function startSession() {
+      setLoading(true);
+      setMessages(
+        isResume
+          ? [{ sender: "bot", text: "Welcome back! Picking up where you left off..." }]
+          : []
+      );
+      setFormState({});
+      setValidationErrors({});
+      setIsComplete(false);
+      setSections(null);
+
+      try {
+        const data = await sendChatMessage(sessionId, formName, "");
+        if (!isMounted) return;
+        applyResponse(data);
+      } catch (err) {
+        if (isMounted) {
+          setMessages([{ sender: "bot", text: "Unable to connect to the server." }]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    startSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sessionId, formName]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!inputMessage.trim() || loading || isComplete) return;
+
+    const userText = inputMessage.trim();
+    setInputMessage("");
+
+    setMessages((prev) => [...prev, { sender: "user", text: userText }]);
+    setLoading(true);
+
+    try {
+      const data = await sendChatMessage(sessionId, formName, userText);
+      applyResponse(data);
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: "bot", text: "Error communicating with the server." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNavigateSection = async (targetIndex) => {
+    if (loading || isComplete) return;
+    setLoading(true);
+
+    try {
+      // Navigation via the progress bar doesn't go through the text
+      // input -- send an empty message with target_section set, and
+      // don't echo a "You" bubble for it (nothing was actually typed).
+      const data = await sendChatMessage(sessionId, formName, "", targetIndex);
+      applyResponse(data);
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: "bot", text: "Error communicating with the server." }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div style={styles.wrapper}>
-      {/* Left Side: Chat Interface */}
       <div style={styles.chatSection}>
         <div style={styles.headerBar}>
           <div style={styles.logoBadge}>P</div>
           <h2 style={styles.heading}>Conversational Assistant</h2>
         </div>
+
+        {sections && (
+          <SectionProgress sections={sections} onNavigate={handleNavigateSection} />
+        )}
 
         <MessageList messages={messages} loading={loading} />
         <div ref={messagesEndRef} />
@@ -83,17 +155,17 @@ export function ChatWindow({ formName = "user_registration" }) {
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="Type your response..."
-            disabled={loading}
+            placeholder={isComplete ? "Form submitted" : "Type your response..."}
+            disabled={loading || isComplete}
             style={styles.input}
           />
           <button
             type="submit"
-            disabled={loading || !inputMessage.trim()}
+            disabled={loading || isComplete || !inputMessage.trim()}
             style={{
               ...styles.button,
-              opacity: loading || !inputMessage.trim() ? 0.6 : 1,
-              cursor: loading || !inputMessage.trim() ? "not-allowed" : "pointer"
+              opacity: loading || isComplete || !inputMessage.trim() ? 0.6 : 1,
+              cursor: loading || isComplete || !inputMessage.trim() ? "not-allowed" : "pointer"
             }}
           >
             {loading ? "..." : "Send"}
@@ -101,14 +173,13 @@ export function ChatWindow({ formName = "user_registration" }) {
         </form>
       </div>
 
-      {/* Right Side: Dynamic Form State Visualizer */}
       <div style={styles.sidePanel}>
         <h3 style={styles.sideHeading}>Form Progress</h3>
 
         <div style={styles.card}>
           <h4 style={styles.cardTitle}>Collected Data</h4>
           <pre style={styles.jsonBox}>
-            {JSON.stringify(formState, null, 2)}
+            {JSON.stringify(visibleFormState, null, 2)}
           </pre>
         </div>
 
@@ -139,12 +210,14 @@ const styles = {
     gap: "24px",
     maxWidth: "960px",
     margin: "30px auto",
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "Inter, sans-serif",
+    width: "100%"
   },
   chatSection: {
     flex: "2",
     display: "flex",
-    flexDirection: "column"
+    flexDirection: "column",
+    minWidth: "0"
   },
   headerBar: {
     display: "flex",
@@ -172,7 +245,8 @@ const styles = {
     flex: "1",
     display: "flex",
     flexDirection: "column",
-    gap: "14px"
+    gap: "14px",
+    minWidth: "220px"
   },
   sideHeading: {
     fontSize: "18px",

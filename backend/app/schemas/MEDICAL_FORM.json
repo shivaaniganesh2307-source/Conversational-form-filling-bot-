@@ -1,52 +1,15 @@
 {
-  "form_name": "medical_registration",
+  "form_id": "medical_form",
+  "form_name": "Medical Form",
   "fields": {
-    "first_name": {
-      "type": "string",
-      "required": true
-    },
-
-    "last_name": {
-      "type": "string",
-      "required": true
-    },
-
-    "date_of_birth": {
-      "type": "date",
-      "required": true
-    },
-
-    "has_allergies": {
-      "type": "boolean",
-      "required": true
-    },
-
-    "allergy_type": {
-      "type": "string",
-      "required": true,
-      "condition": {
-        "field": "has_allergies",
-        "equals": true
-      }
-    },
-
-    "takes_medication": {
-      "type": "boolean",
-      "required": true
-    },
-
-    "medication_name": {
-      "type": "string",
-      "required": true,
-      "condition": {
-        "field": "takes_medication",
-        "equals": true
-      }
-    },
-
-    "emergency_contact": {
-      "type": "string",
-      "required": true
-    }
+    "first_name": {"label": "first name", "type": "name", "required": true, "min_length": 2, "max_length": 50},
+    "last_name": {"label": "last name", "type": "name", "required": true, "min_length": 2, "max_length": 50},
+    "date_of_birth": {"label": "date of birth", "type": "date", "format": "%Y-%m-%d", "required": true},
+    "has_allergies": {"label": "whether you have allergies", "type": "boolean", "required": true},
+    "allergy_details": {"label": "allergy details", "type": "text", "required": true, "min_length": 2, "max_length": 500, "condition": {"field": "has_allergies", "equals": true}},
+    "takes_medication": {"label": "whether you take medication", "type": "boolean", "required": true},
+    "medication_details": {"label": "medication details", "type": "text", "required": true, "min_length": 2, "max_length": 500, "condition": {"field": "takes_medication", "equals": true}},
+    "emergency_contact_name": {"label": "emergency contact name", "type": "name", "required": true, "min_length": 2, "max_length": 100},
+    "emergency_contact_phone": {"label": "emergency contact phone number", "type": "phone", "required": true}
   }
 }

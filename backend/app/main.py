@@ -1,131 +1,133 @@
-import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# DB & Helper Imports using relative imports
 try:
-    from .db import (
-        init_tables,
-        load_form_schema_from_db,
-        get_saved_conversation,
-        save_conversation,
-        save_submissions,
-    )
+    from .db import init_tables, get_session
     from .schema_loader import SchemaLoader
-    from .extractor import LLMExtractor
-    from .validator import FormValidator
-    from .response_generator import ResponseGenerator
-    from .confidence_engine import ConfidenceEngine
-    from .missing_field import MissingFieldDetector
-    from .state_manager import StateManager
-    from .planner import Planner
+    from .conversation_engine import ConversationEngine
+
 except ImportError:
-    # Fallback for running main.py directly as a standalone script
-    from backend.app.db import (
-        init_tables,
-        load_form_schema_from_db,
-        get_saved_conversation,
-        save_conversation,
-        save_submissions,
-    )
+    from backend.app.db import init_tables, get_session
     from backend.app.schema_loader import SchemaLoader
-    from backend.app.extractor import LLMExtractor
-    from backend.app.validator import FormValidator
-    from backend.app.response_generator import ResponseGenerator
-    from backend.app.confidence_engine import ConfidenceEngine
-    from backend.app.missing_field import MissingFieldDetector
-    from backend.app.state_manager import StateManager
-    from backend.app.planner import Planner
+    from backend.app.conversation_engine import ConversationEngine
 
-# _________________________________________
+
+# ============================================================
+# FLASK
+# ============================================================
+
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
-# Create database tables safely on startup
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*"}},
+    supports_credentials=True
+)
+
+
+# ============================================================
+# DATABASE
+# ============================================================
+
 try:
     init_tables()
-except Exception as e:
-    print(f"[WARNING] Could not initialize DB tables on import: {e}")
+except Exception as error:
+    print(f"[WARNING] Could not initialize DB tables: {error}")
 
-# Creating pipeline objects
-extractor = LLMExtractor()
-validator = FormValidator()
-response_generator = ResponseGenerator()
-planner = Planner()
-state_manager = StateManager()
-missing_detector = MissingFieldDetector()
+
+# ============================================================
+# COMPONENTS
+#
+# main.py is intentionally thin -- all conversation logic lives
+# in ConversationEngine so there is exactly one implementation
+# of "what happens on a chat turn".
+# ============================================================
+
 schema_loader = SchemaLoader()
-confidence_engine = ConfidenceEngine()
+engine = ConversationEngine()
 
+
+# ============================================================
+# GET AVAILABLE FORMS
+# ============================================================
+
+@app.route("/api/forms", methods=["GET"])
+@app.route("/api/forms/", methods=["GET"])
+def get_forms():
+
+    try:
+        available_forms = schema_loader.get_available_forms()
+    except Exception as error:
+        print(f"[FORMS ERROR] {error}")
+        available_forms = []
+
+    # Each entry looks like {"id": "employee_form", "name": "Employee Form"}
+    return jsonify({"forms": available_forms})
+
+
+# ============================================================
+# GET A SESSION'S LIVE DETAILS (resume / "my forms" list)
+# ============================================================
+#
+# The frontend remembers which session_ids belong to this browser
+# (localStorage) -- it doesn't need the backend to know "whose"
+# sessions these are. This just answers "what's the live status and
+# saved data for this one session_id", which the frontend calls once
+# per remembered session to build the "My Forms" list and to resume
+# a session's chat.
+# ============================================================
+
+@app.route("/api/sessions/<session_id>", methods=["GET"])
+def get_session_route(session_id):
+
+    session = get_session(session_id)
+
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    schema = schema_loader.load_schema(session["form_id"])
+    session["form_name"] = (
+        schema.get("form_name", session["form_id"]) if schema else session["form_id"]
+    )
+    session["session_id"] = session_id
+
+    return jsonify(session)
+
+
+# ============================================================
+# CHAT
+# ============================================================
 
 @app.route("/api/chat", methods=["POST", "OPTIONS"])
 @app.route("/api/chat/", methods=["POST", "OPTIONS"])
 def chat():
-    # Handle CORS preflight OPTIONS request
+
     if request.method == "OPTIONS":
         return "", 200
 
-    # 1. Get data from frontend payload
     data = request.get_json() or {}
+
     session_id = data.get("session_id")
-    form_name = data.get("form_name", "user_registration")
-    user_message = data.get("message", "").strip()
+    form_name = data.get("form_name")
+    user_message = str(data.get("message", "")).strip()
+    target_section = data.get("target_section")
+
+    if target_section is not None and not isinstance(target_section, int):
+        target_section = None
 
     if not session_id:
         return jsonify({"error": "session_id is required"}), 400
 
-    # 2. Load form schema
-    schema = schema_loader.load_schema(form_name)
+    if not form_name:
+        return jsonify({"error": "form_name is required"}), 400
 
-    # 3. Load previous conversation / state
-    current_state = get_saved_conversation(session_id)
-    if not current_state:
-        current_state = state_manager.create_empty_space(form_name)
+    result = engine.process(session_id, form_name, user_message, target_section=target_section)
 
-    # 4. Extract info if user sent a message
-    if user_message != "":
-        result = extractor.extract_fields(user_message, schema)
-        extracted_data = result.get("extracted_data", {})
-        current_state = state_manager.update_state(
-            current_state,
-            extracted_data
-        )
+    if "error" in result:
+        return jsonify(result), 500
 
-    # 5. Validate fields against schema rules
-    validation_errors = {}
-    fields = schema.get("fields", {}) if isinstance(schema, dict) else {}
-    for field_name, rules in fields.items():
-        value = current_state.get(field_name)
-        errors = validator.validate_field(field_name, value, rules)
-        if errors:
-            validation_errors[field_name] = errors
+    return jsonify(result)
 
-    # 6. Detect missing fields & evaluate confidence
-    missing_fields = missing_detector.get_missing_fields(form_name, current_state)
-    confidence_scores = confidence_engine.confidence_evaluation(current_state)
-    low_confidence_fields = confidence_engine.low_confidence_fields(confidence_scores)
-
-    # 7. Plan next question/action
-    action_plan = planner.next_question(
-        validation_errors, missing_fields, low_confidence_fields
-    )
-
-    # 8. Generate bot response string
-    bot_response = response_generator.generate(action_plan, schema)
-
-    # 9. Save state / submissions
-    if action_plan.get("action") == "COMPLETE_FORM":
-        save_submissions(session_id, form_name, current_state)
-    else:
-        save_conversation(session_id, form_name, current_state)
-
-    # 10. Send payload to frontend matching api.js structure
-    return jsonify({
-        "response": bot_response,
-        "current_state": current_state,
-        "validation_errors": validation_errors,
-        "action_plan": action_plan
-    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
